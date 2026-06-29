@@ -1,4 +1,3 @@
-import { Suspense } from 'react'
 import LoginPage from './LoginPage'
 
 export const metadata = {
@@ -6,9 +5,5 @@ export const metadata = {
 }
 
 export default function Page() {
-  return (
-    <Suspense>
-      <LoginPage />
-    </Suspense>
-  )
+  return <LoginPage />
 }

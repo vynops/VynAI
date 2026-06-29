@@ -1,13 +1,12 @@
 'use client'
 
 import { useState, FormEvent } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
 import { Cpu, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
-  const router = useRouter()
-  const params = useSearchParams()
-  const from = params.get('from') ?? '/overview'
+  const from = typeof window !== 'undefined'
+    ? (new URLSearchParams(window.location.search).get('from') ?? '/overview')
+    : '/overview'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -28,8 +27,7 @@ export default function LoginPage() {
       })
 
       if (res.ok) {
-        router.push(from)
-        router.refresh()
+        window.location.href = from
       } else {
         const data = await res.json()
         setError(data.error ?? 'Login failed')

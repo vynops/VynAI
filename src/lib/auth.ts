@@ -35,7 +35,7 @@ export function sessionCookieOptions(token: string, expire = false) {
     name: COOKIE_NAME,
     value: token,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.VYNAI_SECURE_COOKIE === 'true',
     sameSite: 'lax' as const,
     path: '/',
     maxAge: expire ? 0 : 7 * 24 * 60 * 60,
