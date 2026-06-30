@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VynAI — AI Fleet Dashboard",
+  title: { default: 'VynAI · VynOps Suite', template: '%s | VynAI' },
   description: "Manage your Ollama LLM server fleet with VynAI.",
 };
 

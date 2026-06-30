@@ -126,11 +126,15 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Env vars hint */}
-        <p className="text-center text-xs text-slate-600 mt-5 leading-relaxed">
-          Credentials set via <code className="text-slate-500">VYNAI_ADMIN_EMAIL</code> and{' '}
-          <code className="text-slate-500">VYNAI_ADMIN_PASSWORD</code> in <code className="text-slate-500">.env.local</code>
-        </p>
+        {/* Family footer */}
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <p className="text-xs text-slate-600 tracking-widest uppercase">Part of the VynOps Suite</p>
+          <div className="flex items-center gap-2">
+            <a href="http://localhost:3000" className="px-2.5 py-1 rounded-full text-xs font-medium text-slate-500 border border-slate-700 hover:text-slate-300 hover:border-slate-500 transition-colors">VynOps</a>
+            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">VynAI</span>
+            <a href="http://localhost:3020" className="px-2.5 py-1 rounded-full text-xs font-medium text-slate-500 border border-slate-700 hover:text-slate-300 hover:border-slate-500 transition-colors">VynCost</a>
+          </div>
+        </div>
       </div>
     </div>
   )

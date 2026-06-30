@@ -1,7 +1,7 @@
 import LoginPage from './LoginPage'
 
 export const metadata = {
-  title: 'Sign in — VynAI',
+  title: { absolute: 'VynAI · VynOps Suite' },
 }
 
 export default function Page() {
