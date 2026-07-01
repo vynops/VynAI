@@ -57,16 +57,13 @@ function Toggle({ enabled, onChange, disabled }: { enabled: boolean; onChange: (
   )
 }
 
-function ComingSoon() {
-  return <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-500 font-medium">v0.2</span>
-}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { data: remote, mutate } = useSWR<AppSettings & { adminEmail: string }>('/api/settings', fetcher)
+  const { data: remote, mutate } = useSWR<AppSettings & { adminEmail: string; currentPort: string }>('/api/settings', fetcher)
 
-  const [form, setForm] = useState<AppSettings & { adminEmail: string } | null>(null)
+  const [form, setForm] = useState<AppSettings & { adminEmail: string; currentPort: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saved' | 'error'>('idle')
 
@@ -75,8 +72,8 @@ export default function SettingsPage() {
     if (remote && !form) setForm(remote)
   }, [remote, form])
 
-  function set<K extends keyof (AppSettings & { adminEmail: string })>(
-    key: K, value: (AppSettings & { adminEmail: string })[K]
+  function set<K extends keyof (AppSettings & { adminEmail: string; currentPort: string })>(
+    key: K, value: (AppSettings & { adminEmail: string; currentPort: string })[K]
   ) {
     setForm(prev => prev ? { ...prev, [key]: value } : prev)
     setSaveState('idle')
@@ -164,31 +161,18 @@ export default function SettingsPage() {
       <Section title="General" icon={Server}>
         <Field label="Gateway Port" sub="Port VynAI listens on for API requests">
           <div className="flex items-center gap-2">
-            <input className={inputCls} value={form?.gatewayPort ?? ''}
-              onChange={e => set('gatewayPort', e.target.value)} placeholder="3005" />
-            <span className="text-xs text-slate-500 whitespace-nowrap">requires restart</span>
+            <input readOnly value={form?.currentPort ?? '3010'}
+              className={`${inputCls} opacity-60 cursor-default`} />
+            <p className="text-xs text-slate-500 whitespace-nowrap">Edit .env.local to change</p>
           </div>
         </Field>
         <div className="border-t border-slate-800/60" />
         <Field label="Default Ollama URL" sub="Auto-registers this server on first startup">
           <input className={inputCls} value={form?.defaultOllamaUrl ?? ''}
             onChange={e => set('defaultOllamaUrl', e.target.value)}
-            placeholder="http://10.1.14.249:11434" />
+            placeholder="http://Ollama-Server-URL:11434" />
         </Field>
-        <div className="border-t border-slate-800/60" />
-        <Field label="Auto-restart on crash" sub="Restart Ollama servers that go offline">
-          <div className="flex items-center gap-3">
-            <Toggle enabled={false} onChange={() => {}} disabled />
-            <ComingSoon />
-          </div>
-        </Field>
-        <div className="border-t border-slate-800/60" />
-        <Field label="Auto model updates" sub="Check for new model digests daily">
-          <div className="flex items-center gap-3">
-            <Toggle enabled={false} onChange={() => {}} disabled />
-            <ComingSoon />
-          </div>
-        </Field>
+
       </Section>
 
       {/* Alerts */}
@@ -280,7 +264,6 @@ export default function SettingsPage() {
             <p className="text-xs text-slate-500 mt-0.5">Ollama Fleet Management Dashboard</p>
           </div>
           <div className="flex flex-wrap gap-4 text-xs text-slate-500">
-            <span>v0.1.0</span>
             <span>MIT License</span>
             <a href="https://github.com/vynops/VynAI" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">GitHub →</a>
           </div>

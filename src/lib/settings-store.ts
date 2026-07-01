@@ -6,7 +6,6 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json')
 
 export interface AppSettings {
   // General
-  gatewayPort: string
   defaultOllamaUrl: string
   // Alerts
   gpuTempThreshold: number
@@ -22,7 +21,6 @@ export interface AppSettings {
 }
 
 const DEFAULTS: AppSettings = {
-  gatewayPort: '3005',
   defaultOllamaUrl: '',
   gpuTempThreshold: 85,
   vramThreshold: 90,

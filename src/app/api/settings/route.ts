@@ -3,10 +3,10 @@ import { loadSettings, saveSettings } from '@/lib/settings-store'
 
 export async function GET() {
   const settings = loadSettings()
-  // Also return the admin email from env (read-only, never the password)
   return NextResponse.json({
     ...settings,
     adminEmail: process.env.VYNAI_ADMIN_EMAIL ?? '',
+    currentPort: process.env.PORT ?? '3010',
   })
 }
 

@@ -51,7 +51,6 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, onToggle
               <Cpu size={14} className="text-white" />
             </div>
             <span className="font-black text-white text-lg tracking-tight">VynAI</span>
-            <span className="text-xs text-cyan-400 font-semibold bg-cyan-500/10 px-1.5 py-0.5 rounded">v0.1</span>
           </div>
         )}
       </div>

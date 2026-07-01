@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { listServers } from '@/lib/server-store'
 import { ollamaStatus } from '@/lib/ollama'
+import { loadSettings } from '@/lib/settings-store'
+import { trackOffline, trackOnline, sendSlackAlert } from '@/lib/alert-tracker'
 import type { OllamaRunningModel } from '@/lib/ollama'
 
 export interface OverviewServer {
@@ -61,14 +63,29 @@ export async function GET() {
     ? Math.round(online.reduce((s, r) => s + (r.latencyMs ?? 0), 0) / online.length)
     : null
 
-  const alerts: OverviewAlert[] = merged
-    .filter(s => !s.online)
-    .map(s => ({
-      id: `offline-${s.id}`,
-      severity: 'critical' as const,
-      message: `Cannot reach ${s.name}: ${s.error}`,
-      serverName: s.name,
-    }))
+  const settings = loadSettings()
+
+  const alerts: OverviewAlert[] = []
+  for (const s of merged) {
+    if (!s.online) {
+      alerts.push({
+        id: `offline-${s.id}`,
+        severity: 'critical' as const,
+        message: `Cannot reach ${s.name}: ${s.error}`,
+        serverName: s.name,
+      })
+      // Send Slack notification only on first detection (online→offline transition)
+      if (settings.alertOnServerDown && settings.slackWebhookUrl) {
+        const isNew = trackOffline(s.id)
+        if (isNew) {
+          sendSlackAlert(settings.slackWebhookUrl, s.name)
+        }
+      }
+    } else {
+      // Server recovered — clear so it can alert again next time
+      trackOnline(s.id)
+    }
+  }
 
   const payload: OverviewResponse = {
     servers: merged.map(s => ({
