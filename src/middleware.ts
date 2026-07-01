@@ -5,7 +5,7 @@ const SECRET = () => new TextEncoder().encode(
   process.env.VYNAI_SECRET ?? 'dev-secret-do-not-use-in-production'
 )
 
-const PUBLIC_PATHS = ['/login', '/api/auth']
+const PUBLIC_PATHS = ['/login', '/api/auth', '/api/v1']
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl

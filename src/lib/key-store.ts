@@ -66,3 +66,22 @@ export function deleteKey(id: string): boolean {
   fs.writeFileSync(KEYS_FILE, JSON.stringify({ keys: after }, null, 2))
   return true
 }
+
+/** Looks up a key by its full value. Returns the key if active, null otherwise. */
+export function validateKey(keyFull: string): StoredKey | null {
+  const key = listKeys().find(k => k.keyFull === keyFull)
+  if (!key || key.status !== 'active') return null
+  return key
+}
+
+/** Increments requestsTotal for a key. Fire-and-forget — non-fatal. */
+export function incrementUsage(id: string): void {
+  try {
+    const keys = listKeys()
+    const idx = keys.findIndex(k => k.id === id)
+    if (idx < 0) return
+    keys[idx] = { ...keys[idx], requestsTotal: keys[idx].requestsTotal + 1 }
+    ensure()
+    fs.writeFileSync(KEYS_FILE, JSON.stringify({ keys }, null, 2))
+  } catch { /* non-fatal */ }
+}
