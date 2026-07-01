@@ -123,7 +123,7 @@ export default function GatewayPage() {
         <div>
           <h2 className="text-lg font-bold text-white">API Gateway</h2>
           <p className="text-sm text-slate-400 mt-0.5">
-            OpenAI-compatible endpoint · <code className="font-mono text-cyan-400">http://localhost:3010/api/v1</code>
+            OpenAI-compatible endpoint · <code className="font-mono text-cyan-400">{typeof window !== 'undefined' ? window.location.origin : ''}/api/v1</code>
           </p>
         </div>
         <button onClick={() => setShowCreate(true)}
@@ -157,7 +157,7 @@ export default function GatewayPage() {
             <p className="text-sm font-semibold text-white mb-2">OpenAI-Compatible Gateway</p>
             <div className="rounded-lg bg-slate-950 border border-slate-800 p-3 font-mono text-xs text-slate-300 overflow-x-auto">
               <div className="text-slate-500"># Python / OpenAI SDK</div>
-              <div>client = OpenAI(base_url=<span className="text-cyan-400">&quot;http://localhost:3010/api/v1&quot;</span>, api_key=<span className="text-green-400">&quot;sk-vynai-...&quot;</span>)</div>
+              <div>client = OpenAI(base_url=<span className="text-cyan-400">&quot;{typeof window !== 'undefined' ? window.location.origin : 'http://YOUR-SERVER'}/api/v1&quot;</span>, api_key=<span className="text-green-400">&quot;sk-vynai-...&quot;</span>)</div>
             </div>
           </div>
         </div>
