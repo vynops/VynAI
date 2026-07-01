@@ -35,7 +35,20 @@ function CreateKeyModal({ onClose, onCreated }: { onClose: () => void; onCreated
   }
 
   function copy() {
-    if (newKey) { navigator.clipboard.writeText(newKey.keyFull); setCopied(true); setTimeout(() => setCopied(false), 2000) }
+    if (!newKey) return
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(newKey.keyFull).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+    } else {
+      // Fallback for non-secure contexts (plain HTTP on IP)
+      const ta = document.createElement('textarea')
+      ta.value = newKey.keyFull
+      ta.style.position = 'fixed'; ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus(); ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      setCopied(true); setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   return (
