@@ -126,15 +126,18 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Family footer */}
-        <div className="mt-8 flex flex-col items-center gap-3">
-          <p className="text-xs text-slate-600 tracking-widest uppercase">Part of the VynOps Suite</p>
-          <div className="flex items-center gap-2">
-            <a href="http://localhost:3000" className="px-2.5 py-1 rounded-full text-xs font-medium text-slate-500 border border-slate-700 hover:text-slate-300 hover:border-slate-500 transition-colors">VynOps</a>
-            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">VynAI</span>
-            <a href="http://localhost:3020" className="px-2.5 py-1 rounded-full text-xs font-medium text-slate-500 border border-slate-700 hover:text-slate-300 hover:border-slate-500 transition-colors">VynCost</a>
-          </div>
+        {/* First-time setup hint */}
+        <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-xs text-slate-500 space-y-1.5">
+          <p className="font-semibold text-slate-400">First-time setup</p>
+          <p>Set <span className="font-mono text-slate-400">VYNAI_ADMIN_EMAIL</span> and <span className="font-mono text-slate-400">VYNAI_ADMIN_PASSWORD</span> in <span className="font-mono text-slate-400">.env.local</span> — the admin account is created automatically on first boot.</p>
         </div>
+
+        {/* Family footer */}
+        <p className="text-center text-xs text-slate-600 mt-4">
+          Part of the{' '}
+          <a href="https://vynops.com/" target="_blank" rel="noopener noreferrer"
+            className="text-cyan-500 hover:text-cyan-400 transition-colors">VynOps Suite</a>
+        </p>
       </div>
     </div>
   )

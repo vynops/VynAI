@@ -16,6 +16,9 @@ export interface StoredKey {
   rateLimitRpm: number
   rateLimitTpm: number | null
   requestsTotal: number
+  tokensPrompt: number
+  tokensCompletion: number
+  tokensByModel: Record<string, { prompt: number; completion: number }>
 }
 
 function ensure() {
@@ -43,6 +46,9 @@ export function createKey(input: { name: string; rateLimitRpm?: number; rateLimi
     rateLimitRpm: input.rateLimitRpm ?? 60,
     rateLimitTpm: input.rateLimitTpm ?? null,
     requestsTotal: 0,
+    tokensPrompt: 0,
+    tokensCompletion: 0,
+    tokensByModel: {},
   }
   const keys = [...listKeys(), key]
   ensure()
@@ -81,6 +87,25 @@ export function incrementUsage(id: string): void {
     const idx = keys.findIndex(k => k.id === id)
     if (idx < 0) return
     keys[idx] = { ...keys[idx], requestsTotal: keys[idx].requestsTotal + 1 }
+    ensure()
+    fs.writeFileSync(KEYS_FILE, JSON.stringify({ keys }, null, 2))
+  } catch { /* non-fatal */ }
+}
+
+/** Adds prompt/completion token counts for a key. Fire-and-forget — non-fatal. */
+export function addTokenUsage(id: string, model: string, promptTokens: number, completionTokens: number): void {
+  try {
+    const keys = listKeys()
+    const idx = keys.findIndex(k => k.id === id)
+    if (idx < 0) return
+    const byModel = keys[idx].tokensByModel ?? {}
+    const m = byModel[model] ?? { prompt: 0, completion: 0 }
+    keys[idx] = {
+      ...keys[idx],
+      tokensPrompt: (keys[idx].tokensPrompt ?? 0) + promptTokens,
+      tokensCompletion: (keys[idx].tokensCompletion ?? 0) + completionTokens,
+      tokensByModel: { ...byModel, [model]: { prompt: m.prompt + promptTokens, completion: m.completion + completionTokens } },
+    }
     ensure()
     fs.writeFileSync(KEYS_FILE, JSON.stringify({ keys }, null, 2))
   } catch { /* non-fatal */ }

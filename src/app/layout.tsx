@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: { default: 'VynAI · VynOps Suite', template: '%s | VynAI' },
   description: "Manage your Ollama LLM server fleet with VynAI.",
+  icons: { icon: '/favicon-circle.png', shortcut: '/favicon-circle.png', apple: '/favicon-circle.png' },
 };
 
 export default function RootLayout({

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validateKey, incrementUsage } from '@/lib/key-store'
+import { validateKey, incrementUsage, addTokenUsage } from '@/lib/key-store'
+import { appendLog } from '@/lib/request-log-store'
 import { checkRateLimit } from '@/lib/rate-limiter'
 import { listServers } from '@/lib/server-store'
 import { ollamaStatus } from '@/lib/ollama'
@@ -15,7 +16,9 @@ function errorJson(status: number, message: string, code: string) {
 }
 
 export async function POST(req: NextRequest) {
-  // ── 1. Auth ───────────────────────────────────────────────────────────────
+  const startTime = Date.now()
+
+  // ── 1. Auth ─────────────────────────────────────────────────────
   const authHeader = req.headers.get('authorization') ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
   if (!token) return errorJson(401, 'Missing Authorization header', 'missing_auth')
@@ -23,8 +26,9 @@ export async function POST(req: NextRequest) {
   const apiKey = validateKey(token)
   if (!apiKey) return errorJson(401, 'Invalid or revoked API key', 'invalid_api_key')
 
-  // ── 2. Rate limit ─────────────────────────────────────────────────────────
+  // ── 2. Rate limit ───────────────────────────────────────────────
   if (!checkRateLimit(apiKey.id, apiKey.rateLimitRpm)) {
+    appendLog({ timestamp: new Date().toISOString(), keyId: apiKey.id, keyName: apiKey.name, model: '', promptTokens: 0, completionTokens: 0, latencyMs: Date.now() - startTime, status: 429, error: 'Rate limit exceeded' })
     return errorJson(429, `Rate limit exceeded: ${apiKey.rateLimitRpm} req/min`, 'rate_limit_exceeded')
   }
 
@@ -69,7 +73,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (!target) return errorJson(503, 'No Ollama servers are currently online', 'servers_offline')
+  if (!target) {
+    appendLog({ timestamp: new Date().toISOString(), keyId: apiKey.id, keyName: apiKey.name, model: body.model!, promptTokens: 0, completionTokens: 0, latencyMs: Date.now() - startTime, status: 503, error: 'No servers online' })
+    return errorJson(503, 'No Ollama servers are currently online', 'servers_offline')
+  }
 
   // ── 5. Forward to Ollama /api/chat ────────────────────────────────────────
   const ollamaPayload = {
@@ -92,11 +99,13 @@ export async function POST(req: NextRequest) {
 
   if (!ollamaRes.ok) {
     const text = await ollamaRes.text().catch(() => 'unknown error')
+    appendLog({ timestamp: new Date().toISOString(), keyId: apiKey.id, keyName: apiKey.name, model: body.model!, promptTokens: 0, completionTokens: 0, latencyMs: Date.now() - startTime, status: 502, error: `Ollama: ${text.slice(0, 120)}` })
     return errorJson(502, `Ollama error: ${text}`, 'upstream_error')
   }
 
   // Increment usage (async, non-blocking)
   incrementUsage(apiKey.id)
+  const keyId = apiKey.id
 
   // ── 6a. Streaming response ────────────────────────────────────────────────
   if (shouldStream) {
@@ -127,6 +136,11 @@ export async function POST(req: NextRequest) {
               try {
                 const chunk = JSON.parse(line)
                 if (chunk.done) {
+                  // Capture token usage from final done chunk
+                  const pt = chunk.prompt_eval_count ?? 0
+                  const ct = chunk.eval_count ?? 0
+                  if (pt || ct) addTokenUsage(keyId, body.model!, pt, ct)
+                  appendLog({ timestamp: new Date().toISOString(), keyId, keyName: apiKey.name, model: body.model!, promptTokens: pt, completionTokens: ct, latencyMs: Date.now() - startTime, status: 200 })
                   // Final chunk — emit finish then DONE
                   push(JSON.stringify({
                     id: completionId,
@@ -182,6 +196,10 @@ export async function POST(req: NextRequest) {
       const parsed = JSON.parse(lines[0])
       // content may be '' for thinking models — still use it (could be empty thinking)
       fullContent = parsed.message?.content ?? parsed.response ?? ''
+      const pt = parsed.prompt_eval_count ?? 0
+      const ct = parsed.eval_count ?? 0
+      if (pt || ct) addTokenUsage(keyId, body.model!, pt, ct)
+      appendLog({ timestamp: new Date().toISOString(), keyId, keyName: apiKey.name, model: body.model!, promptTokens: pt, completionTokens: ct, latencyMs: Date.now() - startTime, status: 200 })
     } catch { /* skip */ }
   } else {
     // NDJSON stream — accumulate content across all chunks
@@ -189,6 +207,12 @@ export async function POST(req: NextRequest) {
       try {
         const chunk = JSON.parse(line)
         fullContent += chunk.message?.content ?? chunk.response ?? ''
+        if (chunk.done) {
+          const pt = chunk.prompt_eval_count ?? 0
+          const ct = chunk.eval_count ?? 0
+          if (pt || ct) addTokenUsage(keyId, body.model!, pt, ct)
+          appendLog({ timestamp: new Date().toISOString(), keyId, keyName: apiKey.name, model: body.model!, promptTokens: pt, completionTokens: ct, latencyMs: Date.now() - startTime, status: 200 })
+        }
       } catch { /* skip */ }
     }
   }

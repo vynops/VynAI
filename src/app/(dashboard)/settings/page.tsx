@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { Save, Bell, Database, Shield, Server, Info, BookOpen, Check, Loader2, AlertCircle, User } from 'lucide-react'
+import { Save, Bell, Database, Shield, Server, Info, BookOpen, Check, Loader2, AlertCircle, User, Eye, EyeOff, KeyRound } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { AppSettings } from '@/lib/settings-store'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
@@ -62,10 +63,38 @@ function Toggle({ enabled, onChange, disabled }: { enabled: boolean; onChange: (
 
 export default function SettingsPage() {
   const { data: remote, mutate } = useSWR<AppSettings & { adminEmail: string; currentPort: string }>('/api/settings', fetcher)
+  const { data: me } = useSWR<{ email: string; name: string }>('/api/auth/me', fetcher)
 
   const [form, setForm] = useState<AppSettings & { adminEmail: string; currentPort: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saved' | 'error'>('idle')
+
+  // Change password state
+  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' })
+  const [showPw, setShowPw] = useState(false)
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwState, setPwState] = useState<'idle' | 'saved' | 'error'>('idle')
+  const [pwError, setPwError] = useState('')
+
+  async function handleChangePassword() {
+    if (pwForm.next !== pwForm.confirm) { setPwError('Passwords do not match'); return }
+    if (pwForm.next.length < 8) { setPwError('Must be at least 8 characters'); return }
+    setPwSaving(true); setPwError('')
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.next }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setPwState('saved')
+      setPwForm({ current: '', next: '', confirm: '' })
+      setTimeout(() => setPwState('idle'), 3000)
+    } else {
+      setPwState('error'); setPwError(data.error ?? 'Failed to change password')
+    }
+    setPwSaving(false)
+  }
 
   // Hydrate form from server on first load
   useEffect(() => {
@@ -138,21 +167,37 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Admin credentials (read-only — set in .env.local) */}
-      <Section title="Admin Account" icon={User}>
-        <Field label="Admin Email" sub="Set via VYNAI_ADMIN_EMAIL in .env.local">
-          <input
-            readOnly
-            value={form?.adminEmail ?? ''}
-            className={`${inputCls} opacity-60 cursor-default`}
-          />
+      {/* Admin credentials */}
+      <Section title="My Account" icon={User}>
+        <Field label="Email" sub="Your login email">
+          <input readOnly value={me?.email ?? ''} className={`${inputCls} opacity-60 cursor-default`} />
         </Field>
         <div className="border-t border-slate-800/60" />
-        <Field label="Password" sub="Set via VYNAI_ADMIN_PASSWORD in .env.local">
-          <div className="flex items-center gap-3">
-            <input readOnly value="••••••••••••" type="password"
-              className={`${inputCls} opacity-60 cursor-default flex-1`} />
-            <p className="text-xs text-slate-500 whitespace-nowrap">Edit .env.local to change</p>
+        <Field label="Change Password">
+          <div className="space-y-2">
+            <div className="relative">
+              <input type={showPw ? 'text' : 'password'} placeholder="Current password"
+                value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))}
+                className={cn(inputCls, 'pr-10')} />
+              <button type="button" onClick={() => setShowPw(!showPw)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                {showPw ? <EyeOff size={13} /> : <Eye size={13} />}
+              </button>
+            </div>
+            <input type={showPw ? 'text' : 'password'} placeholder="New password (min 8 chars)"
+              value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))}
+              className={inputCls} />
+            <input type={showPw ? 'text' : 'password'} placeholder="Confirm new password"
+              value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))}
+              className={inputCls} />
+            {pwError && <p className="text-xs text-red-400">{pwError}</p>}
+            <button onClick={handleChangePassword}
+              disabled={!pwForm.current || !pwForm.next || !pwForm.confirm || pwSaving}
+              className={cn('flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50',
+                pwState === 'saved' ? 'bg-green-500 text-white' : pwState === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/30' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700')}>
+              {pwSaving ? <Loader2 size={13} className="animate-spin" /> : pwState === 'saved' ? <Check size={13} /> : <KeyRound size={13} />}
+              {pwSaving ? 'Changing…' : pwState === 'saved' ? 'Password changed!' : 'Change Password'}
+            </button>
           </div>
         </Field>
       </Section>
