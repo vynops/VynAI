@@ -374,7 +374,7 @@ Dashboard endpoints — `vynai_session` cookie required.
 | **VynCost** | Cloud cost visibility | [vynops/VynCost](https://github.com/vynops/VynCost) |
 | **VynDB** | Database operations | [vynops/VynDB](https://github.com/vynops/VynDB) |
 | **VynDC** | Data center management | [vynops/VynDC](https://github.com/vynops/VynDC) |
-| **VynCICD** | CI/CD pipeline management | — |
+| **VynCICD** | CI/CD pipeline management | [vynops/VynCICD](https://github.com/vynops/VynCICD) |
 
 ---
 
