@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { loadSettings, saveSettings } from '@/lib/settings-store'
+import { requireAdmin } from '@/lib/auth'
 
 export async function GET() {
   const settings = loadSettings()
@@ -11,6 +12,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const deny = await requireAdmin(req)
+  if (deny) return deny
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
   // Strip read-only fields before saving

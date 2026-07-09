@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifySession } from '@/lib/auth'
+import { verifySession, requireAdmin } from '@/lib/auth'
 import { listUsers, createUser, getUserByEmail } from '@/lib/user-store'
 
 export async function GET(req: NextRequest) {
@@ -13,10 +13,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const token = req.cookies.get('vynai_session')?.value
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const session = await verifySession(token)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const deny = await requireAdmin(req)
+  if (deny) return deny
 
   let body: { email?: string; name?: string; password?: string; role?: 'admin' | 'viewer' }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }

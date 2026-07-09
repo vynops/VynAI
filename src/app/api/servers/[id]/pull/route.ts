@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServer } from '@/lib/server-store'
+import { requireAdmin } from '@/lib/auth'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const deny = await requireAdmin(req)
+  if (deny) return deny
   const { id } = await params
   const server = getServer(id)
   if (!server) return NextResponse.json({ error: 'Not found' }, { status: 404 })

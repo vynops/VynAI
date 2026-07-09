@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifySession } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth'
 import { updateUser, deleteUser, getUserById } from '@/lib/user-store'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const token = req.cookies.get('vynai_session')?.value
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const session = await verifySession(token)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const deny = await requireAdmin(req)
+  if (deny) return deny
 
   const { id } = await params
   let body: { name?: string; role?: 'admin' | 'viewer'; active?: boolean }
@@ -19,10 +17,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const token = req.cookies.get('vynai_session')?.value
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const session = await verifySession(token)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const deny = await requireAdmin(req)
+  if (deny) return deny
 
   const { id } = await params
 

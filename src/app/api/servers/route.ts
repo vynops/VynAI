@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listServers, addServer } from '@/lib/server-store'
+import { requireAdmin } from '@/lib/auth'
 
 export async function GET() {
   // Never expose sshPassword to client
@@ -7,6 +8,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const deny = await requireAdmin(req)
+  if (deny) return deny
   let body: { name?: string; url?: string }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 

@@ -53,3 +53,31 @@ export function safeEqual(a: string, b: string): boolean {
   }
   return timingSafeEqual(Buffer.from(a), Buffer.from(b))
 }
+
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
+import { getUserByEmail } from '@/lib/user-store'
+
+/**
+ * Resolves the current session user from a request.
+ * Returns the user record or null if unauthenticated / not found.
+ */
+export async function getSessionUser(req: NextRequest) {
+  const token = req.cookies.get('vynai_session')?.value
+  if (!token) return null
+  const session = await verifySession(token)
+  if (!session) return null
+  return getUserByEmail(session.email) ?? { email: session.email, role: 'admin' as const }
+}
+
+/**
+ * Guard for admin-only routes.
+ * Returns a 401/403 NextResponse if the request is not from an active admin,
+ * or null if the check passes (allowing the handler to continue).
+ */
+export async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
+  const user = await getSessionUser(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.role !== 'admin') return NextResponse.json({ error: 'Forbidden — admin role required' }, { status: 403 })
+  return null
+}
