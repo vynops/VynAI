@@ -150,7 +150,7 @@ ollama list`}</Code>
 
         <Step n={5} title="Register the server with VynAI">
           <p className="text-xs text-slate-400 mb-3">Use the Servers page UI or call the API directly:</p>
-          <Code>{`curl -X POST http://localhost:3005/api/servers \\
+          <Code>{`curl -X POST http://localhost:3010/api/servers \\
   -H 'Content-Type: application/json' \\
   -d '{
     "name": "gpu-server-01",
@@ -166,7 +166,7 @@ ollama list`}</Code>
           <Code>{`# Python
 from openai import OpenAI
 client = OpenAI(
-    base_url="http://localhost:3005/v1",
+    base_url="http://localhost:3010/v1",
     api_key="sk-vyn-..."   # from the Gateway page
 )
 response = client.chat.completions.create(

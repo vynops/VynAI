@@ -1,22 +1,27 @@
 'use client'
 
+import Link from 'next/link'
 import useSWR from 'swr'
-import { Server, Brain, HardDrive, Clock, AlertTriangle, CheckCircle, RefreshCw, Zap } from 'lucide-react'
+import { Server, Brain, HardDrive, Clock, AlertTriangle, CheckCircle, RefreshCw, Zap, ArrowRight } from 'lucide-react'
 import { formatBytes, formatLatency, cn } from '@/lib/utils'
 import { VramBarChart } from '@/components/charts/Charts'
 import type { OverviewResponse } from '@/app/api/overview/route'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
-function StatCard({ label, value, sub, icon: Icon, iconColor, loading }: {
-  label: string; value: string; sub: string; icon: React.ElementType; iconColor: string; loading?: boolean
+function StatCard({ label, value, sub, icon: Icon, iconColor, loading, href }: {
+  label: string; value: string; sub: string; icon: React.ElementType; iconColor: string; loading?: boolean; href?: string
 }) {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-      <div className="mb-3">
-        <div className={`p-2 rounded-lg bg-slate-800 inline-flex`}>
+  const inner = (
+    <div className={cn(
+      'rounded-xl border border-slate-800 bg-slate-900 p-5 transition-all',
+      href && 'hover:border-slate-600 hover:bg-slate-800/70 cursor-pointer group'
+    )}>
+      <div className="mb-3 flex items-start justify-between">
+        <div className="p-2 rounded-lg bg-slate-800 inline-flex">
           <Icon size={18} className={iconColor} />
         </div>
+        {href && <ArrowRight size={13} className="text-slate-700 group-hover:text-slate-400 transition-colors mt-1" />}
       </div>
       {loading
         ? <div className="h-8 w-20 bg-slate-800 rounded animate-pulse mb-1" />
@@ -26,6 +31,7 @@ function StatCard({ label, value, sub, icon: Icon, iconColor, loading }: {
       <div className="text-xs text-slate-500">{sub}</div>
     </div>
   )
+  return href ? <Link href={href}>{inner}</Link> : inner
 }
 
 export default function OverviewPage() {
@@ -46,19 +52,19 @@ export default function OverviewPage() {
         <StatCard label="Servers Online" loading={isLoading}
           value={stats ? `${stats.serversOnline}/${stats.serversTotal}` : '—'}
           sub={stats ? (stats.serversOnline === stats.serversTotal ? 'All reachable' : `${stats.serversTotal - stats.serversOnline} unreachable`) : ''}
-          icon={Server} iconColor="text-cyan-400" />
+          icon={Server} iconColor="text-cyan-400" href="/servers" />
         <StatCard label="Models Available" loading={isLoading}
           value={stats ? `${stats.totalModels}` : '—'}
           sub={stats ? `${stats.loadedCount} currently loaded` : ''}
-          icon={Brain} iconColor="text-violet-400" />
+          icon={Brain} iconColor="text-violet-400" href="/models" />
         <StatCard label="VRAM In Use" loading={isLoading}
           value={stats ? formatBytes(stats.totalVramBytes / 1e9) : '—'}
           sub={`across ${stats?.loadedCount ?? 0} loaded models`}
-          icon={HardDrive} iconColor="text-yellow-400" />
+          icon={HardDrive} iconColor="text-yellow-400" href="/analytics" />
         <StatCard label="Avg API Latency" loading={isLoading}
           value={stats?.avgLatencyMs != null ? formatLatency(stats.avgLatencyMs) : '—'}
           sub="to Ollama /api/tags"
-          icon={Clock} iconColor="text-green-400" />
+          icon={Clock} iconColor="text-green-400" href="/gateway" />
       </div>
 
       {/* VRAM chart + server health */}
@@ -78,7 +84,7 @@ export default function OverviewPage() {
             <div className="h-40 flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
               <Brain size={28} className="opacity-30" />
               <p>No models currently loaded</p>
-              <p className="text-xs">Ollama unloads idle models automatically</p>
+              <Link href="/models" className="text-xs text-cyan-400 hover:underline">Pull a model →</Link>
             </div>
           ) : (
             <VramBarChart data={vramData} />
@@ -97,17 +103,20 @@ export default function OverviewPage() {
           ) : (
             <div className="space-y-3">
               {overview?.servers.map(srv => (
-                <div key={srv.id} className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+                <Link key={srv.id} href="/servers" className="block rounded-lg border border-slate-800 bg-slate-950/50 p-3 hover:border-slate-600 hover:bg-slate-800/40 transition-all group">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className={cn('w-2 h-2 rounded-full flex-shrink-0',
                         srv.online ? 'bg-green-400 animate-pulse' : 'bg-red-400')} />
                       <span className="text-xs font-semibold text-white truncate">{srv.name}</span>
                     </div>
-                    <span className={cn('text-xs font-medium',
-                      srv.online ? 'text-green-400' : 'text-red-400')}>
-                      {srv.online ? 'online' : 'offline'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn('text-xs font-medium',
+                        srv.online ? 'text-green-400' : 'text-red-400')}>
+                        {srv.online ? 'online' : 'offline'}
+                      </span>
+                      <ArrowRight size={11} className="text-slate-700 group-hover:text-slate-400 transition-colors" />
+                    </div>
                   </div>
                   {srv.online ? (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400">
@@ -120,7 +129,7 @@ export default function OverviewPage() {
                   ) : (
                     <p className="text-xs text-red-400 truncate">{srv.error}</p>
                   )}
-                </div>
+                </Link>
               ))}
             </div>
           )}
@@ -133,10 +142,13 @@ export default function OverviewPage() {
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold text-white">Alerts</h2>
-            {(overview?.alerts.length ?? 0) > 0
-              ? <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 font-medium">{overview?.alerts.length} active</span>
-              : <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle size={12} /> All clear</span>
-            }
+            <div className="flex items-center gap-2">
+              {(overview?.alerts.length ?? 0) > 0
+                ? <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 font-medium">{overview?.alerts.length} active</span>
+                : <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle size={12} /> All clear</span>
+              }
+              <Link href="/logs" className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">Logs <ArrowRight size={11} /></Link>
+            </div>
           </div>
           {isLoading ? (
             <div className="space-y-2">
@@ -172,7 +184,7 @@ export default function OverviewPage() {
             <div className="flex flex-col items-center justify-center py-6 text-slate-500 text-xs gap-1">
               <Zap size={16} className="opacity-30" />
               <p>No active sessions</p>
-              <p>Models auto-load on first request</p>
+              <Link href="/models" className="text-cyan-400 hover:underline mt-0.5">Browse models →</Link>
             </div>
           ) : (
             <div className="space-y-2">
