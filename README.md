@@ -123,8 +123,8 @@ Edit `.env.local`:
 ```env
 # Required
 VYNAI_SECRET=<run: openssl rand -base64 32>
-VYNAI_ADMIN_EMAIL=admin@example.com
-VYNAI_ADMIN_PASSWORD=your-secure-password
+VYNAI_ADMIN_EMAIL=admin@vynai.local
+VYNAI_ADMIN_PASSWORD=changeme
 
 # Optional
 DEFAULT_OLLAMA_URL=http://localhost:11434
