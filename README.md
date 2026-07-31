@@ -123,8 +123,8 @@ Edit `.env.local`:
 ```env
 # Required
 VYNAI_SECRET=<run: openssl rand -base64 32>
-VYNAI_ADMIN_EMAIL=admin@vynai.local
-VYNAI_ADMIN_PASSWORD=changeme
+VYNAI_ADMIN_EMAIL=admin@example.com
+VYNAI_ADMIN_PASSWORD=your-secure-password
 
 # Optional
 DEFAULT_OLLAMA_URL=http://localhost:11434
@@ -145,13 +145,16 @@ Log in with your `VYNAI_ADMIN_EMAIL` and `VYNAI_ADMIN_PASSWORD`. On first login,
 
 ## Using the Gateway
 
+Replace `YOUR_MODEL_NAME` with a model returned by `GET /api/v1/models`.
+
 ### PowerShell (Windows)
 
 ```powershell
-$key = sk-vynai-YOUR_KEY
+$key = "sk-vynai-YOUR_KEY"
+$model = "YOUR_MODEL_NAME"
 $body = @{
-    model    = llama3.2
-    messages = @(@{ role = user; content = Hello! })
+    model    = $model
+    messages = @(@{ role = "user"; content = "YOUR_PROMPT" })
     stream   = $false
 } | ConvertTo-Json -Depth 5
 
@@ -169,7 +172,7 @@ Invoke-RestMethod -Uri "http://localhost:3010/api/v1/chat/completions" `
 curl -X POST http://localhost:3010/api/v1/chat/completions \
   -H "Authorization: Bearer sk-vynai-YOUR_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"llama3.2","messages":[{"role":"user","content":"Hello!"}],"stream":false}'
+  -d '{"model":"YOUR_MODEL_NAME","messages":[{"role":"user","content":"YOUR_PROMPT"}],"stream":false}'
 ```
 
 ### Python (OpenAI SDK)
@@ -183,8 +186,8 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="llama3.2",
-    messages=[{"role": "user", "content": "Hello!"}]
+    model="YOUR_MODEL_NAME",
+    messages=[{"role": "user", "content": "YOUR_PROMPT"}]
 )
 print(response.choices[0].message.content)
 ```
@@ -365,6 +368,19 @@ Dashboard endpoints — `vynai_session` cookie required.
 
 ---
 
+## Part of the VynOps Suite
+
+| Product | Purpose | Repo |
+|---|---|---|
+| **VynOps** | Kubernetes operations platform | [vynops/VynOps](https://github.com/vynops/VynOps) |
+| **VynAI** | Ollama fleet manager and AI gateway | [vynops/VynAI](https://github.com/vynops/VynAI) |
+| **VynCost** | Cloud cost visibility | [vynops/VynCost](https://github.com/vynops/VynCost) |
+| **VynDB** | Database operations | [vynops/VynDB](https://github.com/vynops/VynDB) |
+| **VynDC** | Data center management | [vynops/VynDC](https://github.com/vynops/VynDC) |
+| **VynCICD** | CI/CD pipeline management | — |
+
+---
+
 ## Contributing
 
 Open an issue before submitting a large PR.
@@ -378,18 +394,6 @@ npm run dev
 
 ---
 
-## Part of the VynOps Suite
-
-| Product | Purpose | Repo |
-|---|---|---|
-| **VynOps** | Kubernetes operations platform | [vynops/VynOps](https://github.com/vynops/VynOps) |
-| **VynAI** | Ollama fleet manager and AI gateway | [vynops/VynAI](https://github.com/vynops/VynAI) |
-| **VynCost** | Cloud cost visibility | [vynops/VynCost](https://github.com/vynops/VynCost) |
-| **VynDB** | Database operations | [vynops/VynDB](https://github.com/vynops/VynDB) |
-| **VynDC** | Data center management | [vynops/VynDC](https://github.com/vynops/VynDC) |
-| **VynCICD** | CI/CD pipeline management | [vynops/VynCICD](https://github.com/vynops/VynCICD) |
-
----
 ## License
 
 MIT — see [LICENSE](LICENSE).
