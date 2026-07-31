@@ -139,8 +139,8 @@ export default function LogsPage() {
                         {log.status}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap">{log.promptTokens || '—'}</td>
-                    <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap">{log.completionTokens || '—'}</td>
+                    <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap">{log.promptTokens ?? 0}</td>
+                    <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap">{log.completionTokens ?? 0}</td>
                     <td className={cn('px-4 py-2.5 whitespace-nowrap font-mono', latencyColor(log.latencyMs))}>
                       {log.latencyMs}ms
                     </td>
@@ -157,3 +157,4 @@ export default function LogsPage() {
     </div>
   )
 }
+

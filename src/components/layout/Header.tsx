@@ -69,11 +69,12 @@ export default function Header({ onMobileMenuClick }: { onMobileMenuClick: () =>
       {/* Logout */}
       <button
         onClick={handleLogout}
-        className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors flex-shrink-0"
+        className="flex items-center gap-2 p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors flex-shrink-0"
         aria-label="Sign out"
         title="Sign out"
       >
         <LogOut size={18} />
+        <span className="text-sm font-medium text-white">Ollama</span>
       </button>
     </header>
   )
