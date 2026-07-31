@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { listServers } from '@/lib/server-store'
 import { ollamaStatus } from '@/lib/ollama'
 import { loadSettings } from '@/lib/settings-store'
-import { trackOffline, trackOnline, sendSlackAlert } from '@/lib/alert-tracker'
+import { trackOffline, trackOnline, sendSlackAlert, trackThresholdAlert, sendThresholdSlackAlert } from '@/lib/alert-tracker'
+import { fetchServerMetrics } from '@/lib/ssh'
 import type { OllamaRunningModel } from '@/lib/ollama'
 
 export interface OverviewServer {
@@ -64,6 +65,31 @@ export async function GET() {
     : null
 
   const settings = loadSettings()
+  const gpuMetricsByServer = new Map<string, Awaited<ReturnType<typeof fetchServerMetrics>>>()
+
+  await Promise.allSettled(
+    merged
+      .filter(s => s.online && s.sshUser && s.sshPassword)
+      .map(async (s) => {
+        let host: string
+        try {
+          host = new URL(s.url).hostname
+        } catch {
+          return
+        }
+
+        const metrics = await fetchServerMetrics({
+          host,
+          port: s.sshPort ?? 22,
+          username: s.sshUser!,
+          password: s.sshPassword!,
+        })
+
+        if (!metrics.error) {
+          gpuMetricsByServer.set(s.id, metrics)
+        }
+      })
+  )
 
   const alerts: OverviewAlert[] = []
   for (const s of merged) {
@@ -84,6 +110,54 @@ export async function GET() {
     } else {
       // Server recovered — clear so it can alert again next time
       trackOnline(s.id)
+
+      const metrics = gpuMetricsByServer.get(s.id)
+      if (!metrics || metrics.gpus.length === 0) continue
+
+      const maxTemp = Math.max(...metrics.gpus.map(g => g.tempC))
+      const gpuTempExceeded = maxTemp >= settings.gpuTempThreshold
+      if (gpuTempExceeded) {
+        alerts.push({
+          id: `gpu-temp-${s.id}`,
+          severity: 'warning',
+          message: `${s.name} GPU temp ${maxTemp}C exceeds threshold ${settings.gpuTempThreshold}C`,
+          serverName: s.name,
+        })
+      }
+      const tempTransition = trackThresholdAlert(`gpu-temp-${s.id}`, gpuTempExceeded)
+      if (tempTransition && settings.slackWebhookUrl) {
+        void sendThresholdSlackAlert(
+          settings.slackWebhookUrl,
+          s.name,
+          'GPU temperature',
+          `${maxTemp}C`,
+          `${settings.gpuTempThreshold}C`
+        )
+      }
+
+      const totalVramMiB = metrics.gpus.reduce((sum, g) => sum + g.vramTotalMiB, 0)
+      const usedVramMiB = metrics.gpus.reduce((sum, g) => sum + g.vramUsedMiB, 0)
+      const vramPct = totalVramMiB > 0 ? (usedVramMiB / totalVramMiB) * 100 : 0
+      const vramExceeded = vramPct >= settings.vramThreshold
+
+      if (vramExceeded) {
+        alerts.push({
+          id: `vram-${s.id}`,
+          severity: 'warning',
+          message: `${s.name} VRAM usage ${vramPct.toFixed(1)}% exceeds threshold ${settings.vramThreshold}%`,
+          serverName: s.name,
+        })
+      }
+      const vramTransition = trackThresholdAlert(`vram-${s.id}`, vramExceeded)
+      if (vramTransition && settings.slackWebhookUrl) {
+        void sendThresholdSlackAlert(
+          settings.slackWebhookUrl,
+          s.name,
+          'VRAM usage',
+          `${vramPct.toFixed(1)}%`,
+          `${settings.vramThreshold}%`
+        )
+      }
     }
   }
 
@@ -108,3 +182,4 @@ export async function GET() {
 
   return NextResponse.json(payload)
 }
+

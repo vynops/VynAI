@@ -76,6 +76,11 @@ export default function SettingsPage() {
   const [pwState, setPwState] = useState<'idle' | 'saved' | 'error'>('idle')
   const [pwError, setPwError] = useState('')
 
+  // Slack webhook test state
+  const [testingSlack, setTestingSlack] = useState(false)
+  const [slackTestState, setSlackTestState] = useState<'idle' | 'ok' | 'error'>('idle')
+  const [slackTestMsg, setSlackTestMsg] = useState('')
+
   async function handleChangePassword() {
     if (pwForm.next !== pwForm.confirm) { setPwError('Passwords do not match'); return }
     if (pwForm.next.length < 8) { setPwError('Must be at least 8 characters'); return }
@@ -130,6 +135,41 @@ export default function SettingsPage() {
       setSaveState('error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleTestSlack() {
+    const webhookUrl = (form?.slackWebhookUrl ?? '').trim()
+    if (!webhookUrl) {
+      setSlackTestState('error')
+      setSlackTestMsg('Enter a Slack webhook URL first')
+      return
+    }
+
+    setTestingSlack(true)
+    setSlackTestState('idle')
+    setSlackTestMsg('')
+
+    try {
+      const res = await fetch('/api/settings/test-slack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhookUrl }),
+      })
+      const data = await res.json().catch(() => ({} as { error?: string }))
+
+      if (res.ok) {
+        setSlackTestState('ok')
+        setSlackTestMsg('Test alert sent to Slack')
+      } else {
+        setSlackTestState('error')
+        setSlackTestMsg(data.error ?? 'Slack test failed')
+      }
+    } catch (err) {
+      setSlackTestState('error')
+      setSlackTestMsg(err instanceof Error ? err.message : 'Slack test failed')
+    } finally {
+      setTestingSlack(false)
     }
   }
 
@@ -233,9 +273,34 @@ export default function SettingsPage() {
         </Field>
         <div className="border-t border-slate-800/60" />
         <Field label="Slack Webhook URL" sub="Send alert notifications to Slack">
-          <input className={inputCls} value={form?.slackWebhookUrl ?? ''}
-            onChange={e => set('slackWebhookUrl', e.target.value)}
-            placeholder="https://hooks.slack.com/services/…" />
+          <div className="space-y-2">
+            <input className={inputCls} value={form?.slackWebhookUrl ?? ''}
+              onChange={e => set('slackWebhookUrl', e.target.value)}
+              placeholder="https://hooks.slack.com/services/..." />
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleTestSlack}
+                disabled={testingSlack || !(form?.slackWebhookUrl ?? '').trim()}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 border',
+                  slackTestState === 'ok'
+                    ? 'bg-green-500 text-white border-green-400/40'
+                    : slackTestState === 'error'
+                    ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                    : 'bg-slate-800 text-slate-200 hover:bg-slate-700 border-slate-700'
+                )}
+              >
+                {testingSlack ? <Loader2 size={12} className="animate-spin" /> : slackTestState === 'ok' ? <Check size={12} /> : slackTestState === 'error' ? <AlertCircle size={12} /> : <Bell size={12} />}
+                {testingSlack ? 'Sending…' : 'Test Webhook'}
+              </button>
+              {slackTestMsg && (
+                <span className={cn('text-xs', slackTestState === 'ok' ? 'text-green-400' : 'text-red-400')}>
+                  {slackTestMsg}
+                </span>
+              )}
+            </div>
+          </div>
         </Field>
         <div className="border-t border-slate-800/60" />
         <Field label="Alert on server down">
@@ -251,11 +316,7 @@ export default function SettingsPage() {
       </Section>
 
       {/* Gateway rate limits */}
-      <Section title="Gateway Rate Limits" icon={Shield} badge="v0.2 — gateway proxy">
-        <div className="flex items-start gap-2.5 mb-1 p-3 rounded-lg border border-slate-700/50 bg-slate-950/40 text-xs text-slate-400">
-          <Info size={13} className="text-slate-500 flex-shrink-0 mt-0.5" />
-          Rate limiting is enforced when requests route through the VynAI gateway proxy. Values are saved and will be active in v0.2.
-        </div>
+      <Section title="Gateway Rate Limits" icon={Shield}>
         <Field label="Global RPM limit" sub="Requests per minute across all API keys (0 = off)">
           <input className={inputCls} type="number" value={form?.globalRpm ?? ''}
             onChange={e => set('globalRpm', Number(e.target.value))} placeholder="1000" />
@@ -317,3 +378,4 @@ export default function SettingsPage() {
     </div>
   )
 }
+

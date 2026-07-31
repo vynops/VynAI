@@ -174,11 +174,12 @@ function UsageGuide() {
         { text: '' },
         { text: '# List available models', dim: true },
         { text: '$key = "sk-vynai-YOUR_KEY"', green: true },
+        { text: '$model = "YOUR_MODEL_NAME"', green: true },
         { text: `Invoke-RestMethod -Uri "${origin}/api/v1/models" \`` },
         { text: '  -Headers @{ "Authorization" = "Bearer $key" }', cyan: true },
         { text: '' },
         { text: '# Chat completion', dim: true },
-        { text: '$body = @{ model = "gemma3:270m"; messages = @(@{ role = "user"; content = "Hello" }); stream = $false } | ConvertTo-Json -Depth 5' },
+        { text: '$body = @{ model = $model; messages = @(@{ role = "user"; content = "YOUR_PROMPT" }); stream = $false } | ConvertTo-Json -Depth 5' },
         { text: `Invoke-RestMethod -Uri "${origin}/api/v1/chat/completions" \`` },
         { text: '  -Method POST -ContentType "application/json" \`' },
         { text: '  -Headers @{ "Authorization" = "Bearer $key" } -Body $body', cyan: true },
@@ -189,6 +190,7 @@ function UsageGuide() {
       icon: Terminal,
       lines: [
         { text: '# List available models', dim: true },
+        { text: '# Replace YOUR_MODEL_NAME with one from /api/v1/models', dim: true },
         { text: `curl ${origin}/api/v1/models \\` },
         { text: "  -H 'Authorization: Bearer sk-vynai-YOUR_KEY'", cyan: true },
         { text: '' },
@@ -196,7 +198,7 @@ function UsageGuide() {
         { text: `curl -X POST ${origin}/api/v1/chat/completions \\` },
         { text: "  -H 'Authorization: Bearer sk-vynai-YOUR_KEY' \\", cyan: true },
         { text: "  -H 'Content-Type: application/json' \\" },
-        { text: "  -d '{\"model\":\"llama3.2\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":false}'", green: true },
+        { text: "  -d '{\"model\":\"YOUR_MODEL_NAME\",\"messages\":[{\"role\":\"user\",\"content\":\"YOUR_PROMPT\"}],\"stream\":false}'", green: true },
       ],
     },
     python: {
@@ -215,8 +217,8 @@ function UsageGuide() {
         { text: '' },
         { text: '# Chat', dim: true },
         { text: 'resp = client.chat.completions.create(' },
-        { text: '    model="llama3.2",' },
-        { text: '    messages=[{"role": "user", "content": "Hello"}]' },
+        { text: '    model="YOUR_MODEL_NAME",' },
+        { text: '    messages=[{"role": "user", "content": "YOUR_PROMPT"}]' },
         { text: ')' },
         { text: 'print(resp.choices[0].message.content)' },
       ],
@@ -479,3 +481,4 @@ export default function GatewayPage() {
     </div>
   )
 }
+

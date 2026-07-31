@@ -150,7 +150,9 @@ ollama list`}</Code>
 
         <Step n={5} title="Register the server with VynAI">
           <p className="text-xs text-slate-400 mb-3">Use the Servers page UI or call the API directly:</p>
-          <Code>{`curl -X POST http://localhost:3010/api/servers \\
+          <Code>{`VYNAI_BASE_URL="https://ai.example.com"   # or http://<vynai-host>:3010
+
+curl -X POST "$VYNAI_BASE_URL/api/servers" \\
   -H 'Content-Type: application/json' \\
   -d '{
     "name": "gpu-server-01",
@@ -162,16 +164,19 @@ ollama list`}</Code>
         </Step>
 
         <Step n={6} title="Use the OpenAI-compatible gateway">
-          <p className="text-xs text-slate-400 mb-3">Point any OpenAI SDK at VynAI — no code changes needed beyond the base URL:</p>
+      <p className="text-xs text-slate-400 mb-3">Point any OpenAI SDK at a VynAI URL reachable from your client (domain, IP, or localhost):</p>
           <Code>{`# Python
 from openai import OpenAI
+
+base_url = "https://ai.example.com/api/v1"   # or http://<vynai-host>:3010/api/v1
+
 client = OpenAI(
-    base_url="http://localhost:3010/v1",
+  base_url=base_url,
     api_key="sk-vyn-..."   # from the Gateway page
 )
 response = client.chat.completions.create(
-    model="llama3.2",
-    messages=[{"role": "user", "content": "Hello!"}]
+  model="YOUR_MODEL_NAME",   # choose from /api/v1/models
+  messages=[{"role": "user", "content": "YOUR_PROMPT"}]
 )
 
 # Node.js / curl also works identically`}</Code>
@@ -217,3 +222,4 @@ response = client.chat.completions.create(
     </div>
   )
 }
+
