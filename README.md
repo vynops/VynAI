@@ -368,19 +368,6 @@ Dashboard endpoints — `vynai_session` cookie required.
 
 ---
 
-## Part of the VynOps Suite
-
-| Product | Purpose | Repo |
-|---|---|---|
-| **VynOps** | Kubernetes operations platform | [vynops/VynOps](https://github.com/vynops/VynOps) |
-| **VynAI** | Ollama fleet manager and AI gateway | [vynops/VynAI](https://github.com/vynops/VynAI) |
-| **VynCost** | Cloud cost visibility | [vynops/VynCost](https://github.com/vynops/VynCost) |
-| **VynDB** | Database operations | [vynops/VynDB](https://github.com/vynops/VynDB) |
-| **VynDC** | Data center management | [vynops/VynDC](https://github.com/vynops/VynDC) |
-| **VynCICD** | CI/CD pipeline management | — |
-
----
-
 ## Contributing
 
 Open an issue before submitting a large PR.
@@ -392,18 +379,22 @@ git checkout -b feat/my-feature
 npm run dev
 ```
 
+## Part of the VynOps Suite
+
+| Product | Purpose | Repo |
+|---|---|---|
+| **VynOps** | Kubernetes operations platform | [vynops/VynOps](https://github.com/vynops/VynOps) |
+| **VynAI** | Ollama fleet manager and AI gateway | [vynops/VynAI](https://github.com/vynops/VynAI) |
+| **VynCost** | Cloud cost visibility | [vynops/VynCost](https://github.com/vynops/VynCost) |
+| **VynDB** | Database operations | [vynops/VynDB](https://github.com/vynops/VynDB) |
+| **VynDC** | Data center management | [vynops/VynDC](https://github.com/vynops/VynDC) |
+| **VynCICD** | CI/CD pipeline management | [vynops/VynCICD](https://github.com/vynops/VynCICD) |
+
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE)
 
 ---
 
-<div align="center">
-  <strong>VynAI</strong>  ·  Part of the <a href="https://github.com/vynops">VynOps Suite</a><br/>
-  <a href="https://github.com/vynops/VynAI">GitHub</a>  · 
-  <a href="https://vynops.com/product/vynai">Website</a>  · 
-  <a href="https://discord.gg/vynops">Discord</a>  · 
-  <a href="https://twitter.com/vynops">Twitter / X</a>
-</div>
