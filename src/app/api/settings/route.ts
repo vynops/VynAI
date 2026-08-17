@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { loadSettings, saveSettings } from '@/lib/settings-store'
 import { requireAdmin } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const deny = await requireAdmin(req)
+  if (deny) return deny
+
   const settings = loadSettings()
   return NextResponse.json({
     ...settings,

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ollamaStatus } from '@/lib/ollama'
+import { requireAdmin } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
+  const deny = await requireAdmin(req)
+  if (deny) return deny
+
   let body: { url?: string }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 

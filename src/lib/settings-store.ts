@@ -11,6 +11,15 @@ export interface AppSettings {
   gpuTempThreshold: number
   vramThreshold: number
   slackWebhookUrl: string
+  teamsWebhookUrl: string
+  customWebhookUrl: string
+  alertEmailEnabled: boolean
+  alertRecipients: string
+  smtpHost: string
+  smtpPort: number
+  smtpUser: string
+  smtpPassword: string
+  smtpFrom: string
   alertOnServerDown: boolean
   alertOnRateLimit: boolean
   // Gateway
@@ -25,6 +34,15 @@ const DEFAULTS: AppSettings = {
   gpuTempThreshold: 85,
   vramThreshold: 90,
   slackWebhookUrl: '',
+  teamsWebhookUrl: '',
+  customWebhookUrl: '',
+  alertEmailEnabled: false,
+  alertRecipients: '',
+  smtpHost: '',
+  smtpPort: 587,
+  smtpUser: '',
+  smtpPassword: '',
+  smtpFrom: '',
   alertOnServerDown: true,
   alertOnRateLimit: true,
   globalRpm: 1000,

@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { listKeys, createKey } from '@/lib/key-store'
 import { requireAdmin } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const deny = await requireAdmin(req)
+  if (deny) return deny
+
   // Never expose keyFull to client
   return NextResponse.json(listKeys().map(({ keyFull: _k, ...rest }) => rest))
 }

@@ -11,13 +11,33 @@ import useSWR from 'swr'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
-const NAV = [
-  { href: '/overview', label: 'Overview', icon: LayoutDashboard },
-  { href: '/servers', label: 'Servers', icon: Server },
-  { href: '/models', label: 'Models', icon: Brain },
-  { href: '/gateway', label: 'Gateway', icon: Shield },
-  { href: '/logs', label: 'Logs', icon: ScrollText },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+type NavItem = { href: string; label: string; icon: React.ElementType; adminOnly?: boolean }
+type NavGroup = { label: string; items: NavItem[] }
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Monitor',
+    items: [
+      { href: '/overview',   label: 'Overview',   icon: LayoutDashboard },
+      { href: '/servers',    label: 'Servers',     icon: Server },
+      { href: '/analytics',  label: 'Analytics',   icon: BarChart3 },
+    ],
+  },
+  {
+    label: 'Inference',
+    items: [
+      { href: '/models',   label: 'Models',   icon: Brain },
+      { href: '/gateway',  label: 'Gateway',  icon: Shield },
+      { href: '/logs',     label: 'Logs',     icon: ScrollText },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { href: '/users',     label: 'Users',     icon: Users,    adminOnly: true },
+      { href: '/settings',  label: 'Settings',  icon: Settings },
+    ],
+  },
 ]
 
 interface Props {
@@ -64,64 +84,44 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, onToggle
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-        {NAV.map((item) => {
-          const active = pathname === item.href
+      <nav className="flex-1 px-2 py-4 overflow-y-auto space-y-4">
+        {NAV_GROUPS.map((group, gi) => {
+          const visibleItems = group.items.filter(item => !item.adminOnly || me?.role === 'admin')
+          if (visibleItems.length === 0) return null
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onMobileClose}
-              title={collapsed ? item.label : undefined}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-                active
-                  ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/70',
-                collapsed && 'justify-center px-2',
+            <div key={group.label}>
+              {!collapsed && (
+                <div className="px-3 mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                  {group.label}
+                </div>
               )}
-            >
-              <item.icon size={18} className="flex-shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
-            </Link>
+              {collapsed && gi > 0 && <div className="mx-2 mb-2 border-t border-slate-800/60" />}
+              <div className="space-y-0.5">
+                {visibleItems.map((item) => {
+                  const active = pathname === item.href
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onMobileClose}
+                      title={collapsed ? item.label : undefined}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                        active
+                          ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800/70',
+                        collapsed && 'justify-center px-2',
+                      )}
+                    >
+                      <item.icon size={18} className="flex-shrink-0" />
+                      {!collapsed && <span>{item.label}</span>}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
           )
         })}
-
-        <div className="my-3 border-t border-slate-800/60" />
-
-        {me?.role === 'admin' && (
-          <Link
-            href="/users"
-            onClick={onMobileClose}
-            title={collapsed ? 'Users' : undefined}
-            className={cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-              pathname === '/users'
-                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/70',
-              collapsed && 'justify-center px-2',
-            )}
-          >
-            <Users size={18} className="flex-shrink-0" />
-            {!collapsed && <span>Users</span>}
-          </Link>
-        )}
-
-        <Link
-          href="/settings"
-          onClick={onMobileClose}
-          title={collapsed ? 'Settings' : undefined}
-          className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-            pathname === '/settings'
-              ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/70',
-            collapsed && 'justify-center px-2',
-          )}
-        >
-          <Settings size={18} className="flex-shrink-0" />
-          {!collapsed && <span>Settings</span>}
-        </Link>
       </nav>
 
       {/* Status */}
@@ -159,3 +159,4 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, onToggle
     </aside>
   )
 }
+

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { Save, Bell, Database, Shield, Server, Info, BookOpen, Check, Loader2, AlertCircle, User, Eye, EyeOff, KeyRound } from 'lucide-react'
+import { Save, Bell, Database, Shield, Server, Info, BookOpen, Check, Loader2, AlertCircle, User, Eye, EyeOff, KeyRound, Mail, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AppSettings } from '@/lib/settings-store'
 
@@ -76,10 +76,15 @@ export default function SettingsPage() {
   const [pwState, setPwState] = useState<'idle' | 'saved' | 'error'>('idle')
   const [pwError, setPwError] = useState('')
 
-  // Slack webhook test state
-  const [testingSlack, setTestingSlack] = useState(false)
-  const [slackTestState, setSlackTestState] = useState<'idle' | 'ok' | 'error'>('idle')
-  const [slackTestMsg, setSlackTestMsg] = useState('')
+  // Notification test state
+  const [testingChannel, setTestingChannel] = useState<string | null>(null)
+  const [channelTestResults, setChannelTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({})
+
+  // Email test state
+  const [showSmtpPw, setShowSmtpPw] = useState(false)
+  const [testTo, setTestTo] = useState('')
+  const [testingEmail, setTestingEmail] = useState(false)
+  const [emailTest, setEmailTest] = useState<{ ok: boolean; msg: string } | null>(null)
 
   async function handleChangePassword() {
     if (pwForm.next !== pwForm.confirm) { setPwError('Passwords do not match'); return }
@@ -138,38 +143,55 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleTestSlack() {
-    const webhookUrl = (form?.slackWebhookUrl ?? '').trim()
-    if (!webhookUrl) {
-      setSlackTestState('error')
-      setSlackTestMsg('Enter a Slack webhook URL first')
+  async function handleTestNotification(channel: 'slackWebhookUrl' | 'teamsWebhookUrl' | 'customWebhookUrl') {
+    const url = String(form?.[channel] ?? '').trim()
+    if (!url) {
+      setChannelTestResults(prev => ({ ...prev, [channel]: { ok: false, msg: 'Enter webhook URL first' } }))
       return
     }
 
-    setTestingSlack(true)
-    setSlackTestState('idle')
-    setSlackTestMsg('')
+    setTestingChannel(channel)
+    setChannelTestResults(prev => ({ ...prev, [channel]: { ok: true, msg: 'Sending...' } }))
 
     try {
-      const res = await fetch('/api/settings/test-slack', {
+      const res = await fetch('/api/settings/test-notification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ webhookUrl }),
+        body: JSON.stringify({ channel, url }),
       })
-      const data = await res.json().catch(() => ({} as { error?: string }))
+      const data = await res.json().catch(() => ({} as { message?: string; error?: string }))
 
       if (res.ok) {
-        setSlackTestState('ok')
-        setSlackTestMsg('Test alert sent to Slack')
+        setChannelTestResults(prev => ({ ...prev, [channel]: { ok: true, msg: data.message ?? 'Notification sent' } }))
       } else {
-        setSlackTestState('error')
-        setSlackTestMsg(data.error ?? 'Slack test failed')
+        setChannelTestResults(prev => ({ ...prev, [channel]: { ok: false, msg: data.message ?? data.error ?? 'Notification test failed' } }))
       }
     } catch (err) {
-      setSlackTestState('error')
-      setSlackTestMsg(err instanceof Error ? err.message : 'Slack test failed')
+      setChannelTestResults(prev => ({ ...prev, [channel]: { ok: false, msg: err instanceof Error ? err.message : 'Notification test failed' } }))
     } finally {
-      setTestingSlack(false)
+      setTestingChannel(null)
+    }
+  }
+
+  async function handleTestEmail() {
+    if (!testTo.trim()) {
+      setEmailTest({ ok: false, msg: 'Recipient email is required' })
+      return
+    }
+    setTestingEmail(true)
+    setEmailTest({ ok: true, msg: 'Sending...' })
+    try {
+      const res = await fetch('/api/settings/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: testTo.trim() }),
+      })
+      const data = await res.json().catch(() => ({} as { message?: string }))
+      setEmailTest({ ok: res.ok, msg: data.message ?? (res.ok ? 'Email sent' : 'Email test failed') })
+    } catch (err) {
+      setEmailTest({ ok: false, msg: err instanceof Error ? err.message : 'Email test failed' })
+    } finally {
+      setTestingEmail(false)
     }
   }
 
@@ -280,23 +302,137 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
-                onClick={handleTestSlack}
-                disabled={testingSlack || !(form?.slackWebhookUrl ?? '').trim()}
+                onClick={() => handleTestNotification('slackWebhookUrl')}
+                disabled={testingChannel === 'slackWebhookUrl' || !(form?.slackWebhookUrl ?? '').trim()}
                 className={cn(
                   'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 border',
-                  slackTestState === 'ok'
+                  channelTestResults.slackWebhookUrl?.ok
                     ? 'bg-green-500 text-white border-green-400/40'
-                    : slackTestState === 'error'
+                    : channelTestResults.slackWebhookUrl
                     ? 'bg-red-500/10 text-red-400 border-red-500/30'
                     : 'bg-slate-800 text-slate-200 hover:bg-slate-700 border-slate-700'
                 )}
               >
-                {testingSlack ? <Loader2 size={12} className="animate-spin" /> : slackTestState === 'ok' ? <Check size={12} /> : slackTestState === 'error' ? <AlertCircle size={12} /> : <Bell size={12} />}
-                {testingSlack ? 'Sending…' : 'Test Webhook'}
+                {testingChannel === 'slackWebhookUrl' ? <Loader2 size={12} className="animate-spin" /> : channelTestResults.slackWebhookUrl?.ok ? <Check size={12} /> : channelTestResults.slackWebhookUrl ? <AlertCircle size={12} /> : <Bell size={12} />}
+                {testingChannel === 'slackWebhookUrl' ? 'Sending…' : 'Test Webhook'}
               </button>
-              {slackTestMsg && (
-                <span className={cn('text-xs', slackTestState === 'ok' ? 'text-green-400' : 'text-red-400')}>
-                  {slackTestMsg}
+              {channelTestResults.slackWebhookUrl?.msg && (
+                <span className={cn('text-xs', channelTestResults.slackWebhookUrl.ok ? 'text-green-400' : 'text-red-400')}>
+                  {channelTestResults.slackWebhookUrl.msg}
+                </span>
+              )}
+            </div>
+          </div>
+        </Field>
+        <div className="border-t border-slate-800/60" />
+        <Field label="Teams Webhook URL" sub="Send alert notifications to Microsoft Teams">
+          <div className="space-y-2">
+            <input className={inputCls} value={form?.teamsWebhookUrl ?? ''}
+              onChange={e => set('teamsWebhookUrl', e.target.value)}
+              placeholder="https://outlook.webhook.office.com/webhookb2/..." />
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleTestNotification('teamsWebhookUrl')}
+                disabled={testingChannel === 'teamsWebhookUrl' || !(form?.teamsWebhookUrl ?? '').trim()}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 border',
+                  channelTestResults.teamsWebhookUrl?.ok
+                    ? 'bg-green-500 text-white border-green-400/40'
+                    : channelTestResults.teamsWebhookUrl
+                    ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                    : 'bg-slate-800 text-slate-200 hover:bg-slate-700 border-slate-700'
+                )}
+              >
+                {testingChannel === 'teamsWebhookUrl' ? <Loader2 size={12} className="animate-spin" /> : channelTestResults.teamsWebhookUrl?.ok ? <Check size={12} /> : channelTestResults.teamsWebhookUrl ? <AlertCircle size={12} /> : <Bell size={12} />}
+                {testingChannel === 'teamsWebhookUrl' ? 'Sending…' : 'Test Webhook'}
+              </button>
+              {channelTestResults.teamsWebhookUrl?.msg && (
+                <span className={cn('text-xs', channelTestResults.teamsWebhookUrl.ok ? 'text-green-400' : 'text-red-400')}>
+                  {channelTestResults.teamsWebhookUrl.msg}
+                </span>
+              )}
+            </div>
+          </div>
+        </Field>
+        <div className="border-t border-slate-800/60" />
+        <Field label="Custom Webhook URL" sub="Send JSON alerts to any webhook endpoint">
+          <div className="space-y-2">
+            <input className={inputCls} value={form?.customWebhookUrl ?? ''}
+              onChange={e => set('customWebhookUrl', e.target.value)}
+              placeholder="https://your-webhook-endpoint.com/alerts" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleTestNotification('customWebhookUrl')}
+                disabled={testingChannel === 'customWebhookUrl' || !(form?.customWebhookUrl ?? '').trim()}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 border',
+                  channelTestResults.customWebhookUrl?.ok
+                    ? 'bg-green-500 text-white border-green-400/40'
+                    : channelTestResults.customWebhookUrl
+                    ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                    : 'bg-slate-800 text-slate-200 hover:bg-slate-700 border-slate-700'
+                )}
+              >
+                {testingChannel === 'customWebhookUrl' ? <Loader2 size={12} className="animate-spin" /> : channelTestResults.customWebhookUrl?.ok ? <Check size={12} /> : channelTestResults.customWebhookUrl ? <AlertCircle size={12} /> : <Bell size={12} />}
+                {testingChannel === 'customWebhookUrl' ? 'Sending…' : 'Test Webhook'}
+              </button>
+              {channelTestResults.customWebhookUrl?.msg && (
+                <span className={cn('text-xs', channelTestResults.customWebhookUrl.ok ? 'text-green-400' : 'text-red-400')}>
+                  {channelTestResults.customWebhookUrl.msg}
+                </span>
+              )}
+            </div>
+          </div>
+        </Field>
+        <div className="border-t border-slate-800/60" />
+        <Field label="Email Alerts" sub="Optional SMTP channel for notification delivery">
+          <div className="space-y-2">
+            <label className="inline-flex items-center gap-2 text-xs text-slate-400">
+              <input
+                type="checkbox"
+                checked={form?.alertEmailEnabled ?? false}
+                onChange={e => set('alertEmailEnabled', e.target.checked)}
+                className="rounded border-slate-600 bg-slate-900"
+              />
+              Enable email alerts
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input className={inputCls} value={form?.smtpHost ?? ''}
+                onChange={e => set('smtpHost', e.target.value)} placeholder="SMTP host (e.g. smtp.gmail.com)" />
+              <input className={inputCls} type="number" value={form?.smtpPort ?? 587}
+                onChange={e => set('smtpPort', Number(e.target.value))} placeholder="SMTP port" />
+              <input className={inputCls} value={form?.smtpUser ?? ''}
+                onChange={e => set('smtpUser', e.target.value)} placeholder="SMTP username" />
+              <div className="relative">
+                <input className={cn(inputCls, 'pr-10')} type={showSmtpPw ? 'text' : 'password'} value={form?.smtpPassword ?? ''}
+                  onChange={e => set('smtpPassword', e.target.value)} placeholder="SMTP password" />
+                <button type="button" onClick={() => setShowSmtpPw(v => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  {showSmtpPw ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+              </div>
+              <input className={inputCls} value={form?.smtpFrom ?? ''}
+                onChange={e => set('smtpFrom', e.target.value)} placeholder="From address (e.g. VynAI <alerts@company.com>)" />
+              <input className={inputCls} value={form?.alertRecipients ?? ''}
+                onChange={e => set('alertRecipients', e.target.value)} placeholder="Recipients (comma-separated)" />
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input className={inputCls} value={testTo} onChange={e => setTestTo(e.target.value)}
+                placeholder="Send test email to..." />
+              <button
+                type="button"
+                onClick={handleTestEmail}
+                disabled={testingEmail || !testTo.trim()}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 border bg-slate-800 text-slate-200 hover:bg-slate-700 border-slate-700"
+              >
+                {testingEmail ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                {testingEmail ? 'Sending…' : 'Test Email'}
+              </button>
+              {emailTest?.msg && (
+                <span className={cn('text-xs', emailTest.ok ? 'text-green-400' : 'text-red-400')}>
+                  {emailTest.msg}
                 </span>
               )}
             </div>
@@ -310,7 +446,7 @@ export default function SettingsPage() {
         <Field label="Alert on rate limit hit">
           <div className="flex items-center gap-3">
             <Toggle enabled={form?.alertOnRateLimit ?? true} onChange={v => set('alertOnRateLimit', v)} />
-            <span className="text-xs text-slate-500">Slack webhook required to deliver</span>
+            <span className="text-xs text-slate-500">Delivered to any configured channel (Slack, Teams, Webhook, Email)</span>
           </div>
         </Field>
       </Section>

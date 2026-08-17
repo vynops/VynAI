@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { listServers } from '@/lib/server-store'
 import { ollamaStatus } from '@/lib/ollama'
 import { loadSettings } from '@/lib/settings-store'
-import { trackOffline, trackOnline, sendSlackAlert, trackThresholdAlert, sendThresholdSlackAlert } from '@/lib/alert-tracker'
+import { trackOffline, trackOnline, sendServerDownAlerts, trackThresholdAlert, sendThresholdAlerts } from '@/lib/alert-tracker'
 import { fetchServerMetrics } from '@/lib/ssh'
 import type { OllamaRunningModel } from '@/lib/ollama'
 
@@ -101,10 +101,10 @@ export async function GET() {
         serverName: s.name,
       })
       // Send Slack notification only on first detection (online→offline transition)
-      if (settings.alertOnServerDown && settings.slackWebhookUrl) {
+      if (settings.alertOnServerDown) {
         const isNew = trackOffline(s.id)
         if (isNew) {
-          sendSlackAlert(settings.slackWebhookUrl, s.name)
+          void sendServerDownAlerts(settings, s.name)
         }
       }
     } else {
@@ -125,9 +125,9 @@ export async function GET() {
         })
       }
       const tempTransition = trackThresholdAlert(`gpu-temp-${s.id}`, gpuTempExceeded)
-      if (tempTransition && settings.slackWebhookUrl) {
-        void sendThresholdSlackAlert(
-          settings.slackWebhookUrl,
+      if (tempTransition) {
+        void sendThresholdAlerts(
+          settings,
           s.name,
           'GPU temperature',
           `${maxTemp}C`,
@@ -149,9 +149,9 @@ export async function GET() {
         })
       }
       const vramTransition = trackThresholdAlert(`vram-${s.id}`, vramExceeded)
-      if (vramTransition && settings.slackWebhookUrl) {
-        void sendThresholdSlackAlert(
-          settings.slackWebhookUrl,
+      if (vramTransition) {
+        void sendThresholdAlerts(
+          settings,
           s.name,
           'VRAM usage',
           `${vramPct.toFixed(1)}%`,

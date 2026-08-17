@@ -5,7 +5,7 @@ import { checkRateLimit, checkGlobalRateLimit, checkGlobalTokenLimit, addGlobalT
 import { listServers } from '@/lib/server-store'
 import { ollamaStatus } from '@/lib/ollama'
 import { loadSettings } from '@/lib/settings-store'
-import { canSendRateLimitAlert, sendRateLimitSlackAlert } from '@/lib/alert-tracker'
+import { canSendRateLimitAlert, sendRateLimitAlerts } from '@/lib/alert-tracker'
 
 // Round-robin counter (in-memory)
 let rrIndex = 0
@@ -33,24 +33,24 @@ export async function POST(req: NextRequest) {
   // ── 2. Rate limit ───────────────────────────────────────────────
   if (!checkGlobalRateLimit(settings.globalRpm)) {
     appendLog({ timestamp: new Date().toISOString(), keyId: apiKey.id, keyName: apiKey.name, model: '', promptTokens: 0, completionTokens: 0, latencyMs: Date.now() - startTime, status: 429, error: 'Global RPM limit exceeded' })
-    if (settings.alertOnRateLimit && settings.slackWebhookUrl && canSendRateLimitAlert('global-rpm')) {
-      void sendRateLimitSlackAlert(settings.slackWebhookUrl, `Global RPM exceeded (${settings.globalRpm} req/min)`)
+    if (settings.alertOnRateLimit && canSendRateLimitAlert('global-rpm')) {
+      void sendRateLimitAlerts(settings, `Global RPM exceeded (${settings.globalRpm} req/min)`)
     }
     return errorJson(429, `Global rate limit exceeded: ${settings.globalRpm} req/min`, 'global_rate_limit_exceeded')
   }
 
   if (!checkGlobalTokenLimit(settings.globalTpm)) {
     appendLog({ timestamp: new Date().toISOString(), keyId: apiKey.id, keyName: apiKey.name, model: '', promptTokens: 0, completionTokens: 0, latencyMs: Date.now() - startTime, status: 429, error: 'Global TPM limit exceeded' })
-    if (settings.alertOnRateLimit && settings.slackWebhookUrl && canSendRateLimitAlert('global-tpm')) {
-      void sendRateLimitSlackAlert(settings.slackWebhookUrl, `Global TPM exceeded (${settings.globalTpm ?? 0} tokens/min)`)
+    if (settings.alertOnRateLimit && canSendRateLimitAlert('global-tpm')) {
+      void sendRateLimitAlerts(settings, `Global TPM exceeded (${settings.globalTpm ?? 0} tokens/min)`)
     }
     return errorJson(429, 'Global token rate limit exceeded', 'global_token_rate_limit_exceeded')
   }
 
   if (!checkRateLimit(apiKey.id, apiKey.rateLimitRpm)) {
     appendLog({ timestamp: new Date().toISOString(), keyId: apiKey.id, keyName: apiKey.name, model: '', promptTokens: 0, completionTokens: 0, latencyMs: Date.now() - startTime, status: 429, error: 'Rate limit exceeded' })
-    if (settings.alertOnRateLimit && settings.slackWebhookUrl && canSendRateLimitAlert(`key-rpm-${apiKey.id}`)) {
-      void sendRateLimitSlackAlert(settings.slackWebhookUrl, `Key "${apiKey.name}" exceeded ${apiKey.rateLimitRpm} req/min`)
+    if (settings.alertOnRateLimit && canSendRateLimitAlert(`key-rpm-${apiKey.id}`)) {
+      void sendRateLimitAlerts(settings, `Key "${apiKey.name}" exceeded ${apiKey.rateLimitRpm} req/min`)
     }
     return errorJson(429, `Rate limit exceeded: ${apiKey.rateLimitRpm} req/min`, 'rate_limit_exceeded')
   }
