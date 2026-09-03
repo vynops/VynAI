@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifySession, requireAdmin } from '@/lib/auth'
+import { getSessionUser, requireAdmin } from '@/lib/auth'
 import { listUsers, createUser, getUserByEmail } from '@/lib/user-store'
 
 export async function GET(req: NextRequest) {
-  const token = req.cookies.get('vynai_session')?.value
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const session = await verifySession(token)
+  const session = await getSessionUser(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const allUsers = listUsers()
+  const users = session.role === 'admin'
+    ? allUsers
+    : allUsers.filter(u => u.email.toLowerCase() === session.email.toLowerCase())
+
   // Strip passwordHash before returning
-  return NextResponse.json(listUsers().map(({ passwordHash: _ph, ...u }) => u))
+  return NextResponse.json(users.map(({ passwordHash: _ph, ...u }) => u))
 }
 
 export async function POST(req: NextRequest) {

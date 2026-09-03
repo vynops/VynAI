@@ -13,7 +13,7 @@ const TITLES: Record<string, { title: string; sub: string }> = {
   '/gateway': { title: 'API Gateway', sub: 'Keys, routing, and rate limits' },
   '/analytics': { title: 'Analytics', sub: 'Usage, tokens, and latency trends' },
   '/logs': { title: 'Request Logs', sub: 'Gateway request history' },
-  '/users': { title: 'Users', sub: 'User management' },
+  '/team': { title: 'Team', sub: 'Team members and permissions' },
   '/settings': { title: 'Settings', sub: 'Configuration and thresholds' },
 }
 

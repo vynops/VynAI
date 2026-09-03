@@ -34,8 +34,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Admin',
     items: [
-      { href: '/users',     label: 'Users',     icon: Users,    adminOnly: true },
-      { href: '/settings',  label: 'Settings',  icon: Settings },
+      { href: '/team',      label: 'Team',      icon: Users },
+      { href: '/settings',  label: 'Settings',  icon: Settings, adminOnly: true },
     ],
   },
 ]
@@ -159,4 +159,3 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, onToggle
     </aside>
   )
 }
-

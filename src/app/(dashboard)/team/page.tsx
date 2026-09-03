@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { Users, Plus, Trash2, Shield, Eye, EyeOff, Check, Loader2, X, UserCheck, UserX } from 'lucide-react'
+import { Users, Plus, Trash2, Shield, Eye, EyeOff, Check, Loader2, X, UserCheck, UserX, KeyRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
@@ -43,7 +43,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-cyan-500/10"><Users size={15} className="text-cyan-400" /></div>
-            <h2 className="text-sm font-bold text-white">Create User</h2>
+            <h2 className="text-sm font-bold text-white">Add Team Member</h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800"><X size={15} /></button>
         </div>
@@ -79,7 +79,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
               ))}
             </div>
             <p className="text-xs text-slate-500 mt-1.5">
-              {role === 'admin' ? 'Full access: manage users, keys, servers, settings.' : 'Read-only access to dashboard data.'}
+              {role === 'admin' ? 'Full access: manage team, keys, servers, settings.' : 'Read-only access to dashboard data.'}
             </p>
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
@@ -88,7 +88,126 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <button onClick={handleCreate} disabled={!name.trim() || !email.trim() || password.length < 8 || saving}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-white text-sm font-semibold">
               {saving && <Loader2 size={13} className="animate-spin" />}
-              {saving ? 'Creating…' : 'Create User'}
+              {saving ? 'Adding…' : 'Add Member'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ResetPasswordModal({ user, isSelf, onClose, onUpdated }: { user: User; isSelf: boolean; onClose: () => void; onUpdated: () => void }) {
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showCurrentPw, setShowCurrentPw] = useState(false)
+  const [showNewPw, setShowNewPw] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  async function handleReset() {
+    if (isSelf && !currentPassword) {
+      setError('Current password is required')
+      return
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+
+    setSaving(true); setError(null)
+    const payload: { password: string; currentPassword?: string } = { password }
+    if (isSelf) payload.currentPassword = currentPassword
+
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setSuccess(true)
+      setTimeout(() => {
+        onUpdated()
+        onClose()
+      }, 1000)
+    } else {
+      setError(data.error ?? 'Failed to update password')
+    }
+    setSaving(false)
+  }
+
+  const inputCls = 'w-full px-3 py-2.5 rounded-lg border border-slate-700 bg-slate-950 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/60 transition-all'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-cyan-500/10"><KeyRound size={15} className="text-cyan-400" /></div>
+            <div>
+              <h2 className="text-sm font-bold text-white">{isSelf ? 'Change Password' : 'Reset Password'}</h2>
+              <p className="text-xs text-slate-400">{user.name} ({user.email})</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800"><X size={15} /></button>
+        </div>
+        <div className="space-y-4">
+          {isSelf && (
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Current Password</label>
+              <div className="relative">
+                <input type={showCurrentPw ? 'text' : 'password'} value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
+                  placeholder="••••••••" className={cn(inputCls, 'pr-10')} autoFocus />
+                <button type="button" onClick={() => setShowCurrentPw(!showCurrentPw)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  {showCurrentPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">New Password (min 8 chars)</label>
+            <div className="relative">
+              <input type={showNewPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••" className={cn(inputCls, 'pr-10')} autoFocus={!isSelf} />
+              <button type="button" onClick={() => setShowNewPw(!showNewPw)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                {showNewPw ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">Confirm New Password</label>
+            <div className="relative">
+              <input type={showConfirmPw ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="••••••••" className={cn(inputCls, 'pr-10')} />
+              <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                {showConfirmPw ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          {success && (
+            <div className="flex items-center gap-1.5 text-xs text-green-400">
+              <Check size={14} /> Password updated successfully!
+            </div>
+          )}
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-700 text-slate-400 hover:text-white text-sm">Cancel</button>
+            <button onClick={handleReset} disabled={!password || password.length < 8 || saving || success || (isSelf && !currentPassword)}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-white text-sm font-semibold">
+              {saving && <Loader2 size={13} className="animate-spin" />}
+              {saving ? 'Updating…' : isSelf ? 'Change Password' : 'Reset Password'}
             </button>
           </div>
         </div>
@@ -101,6 +220,7 @@ export default function UsersPage() {
   const { data: users = [], mutate } = useSWR<User[]>('/api/users', fetcher)
   const { data: me } = useSWR<{ id: string; role: string }>('/api/auth/me', fetcher)
   const [showCreate, setShowCreate] = useState(false)
+  const [resetUser, setResetUser] = useState<User | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   async function toggleActive(user: User) {
@@ -144,13 +264,15 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-white">Users</h2>
-          <p className="text-sm text-slate-400 mt-0.5">{users.length} user{users.length !== 1 ? 's' : ''} · {admins} admin{admins !== 1 ? 's' : ''}</p>
+          <h2 className="text-lg font-bold text-white">Team</h2>
+          <p className="text-sm text-slate-400 mt-0.5">{users.length} member{users.length !== 1 ? 's' : ''} · {admins} admin{admins !== 1 ? 's' : ''}</p>
         </div>
-        <button onClick={() => setShowCreate(true)}
-          className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-white font-semibold text-sm transition-colors">
-          <Plus size={15} /> Create User
-        </button>
+        {me?.role === 'admin' && (
+          <button onClick={() => setShowCreate(true)}
+            className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-white font-semibold text-sm transition-colors">
+            <Plus size={15} /> Add Member
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -158,14 +280,14 @@ export default function UsersPage() {
         {users.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-slate-500 gap-2">
             <Users size={28} className="opacity-30" />
-            <p className="text-sm">No users yet</p>
+            <p className="text-sm">No team members yet</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-800">
-                  {['User', 'Role', 'Status', 'Last Login', 'Created', ''].map(h => (
+                  {['Member', 'Role', 'Status', 'Last Login', 'Joined', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-slate-500 font-semibold uppercase tracking-wide text-xs whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -191,7 +313,7 @@ export default function UsersPage() {
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
                           {(['admin', 'viewer'] as const).map(r => (
-                            <button key={r} disabled={loading || isMe} onClick={() => changeRole(user, r)}
+                            <button key={r} disabled={loading || isMe || me?.role !== 'admin'} onClick={() => changeRole(user, r)}
                               className={cn('px-2 py-0.5 rounded text-xs font-medium transition-all capitalize',
                                 user.role === r
                                   ? r === 'admin' ? 'bg-violet-500/15 text-violet-400 border border-violet-500/30' : 'bg-slate-700 text-slate-300 border border-slate-600'
@@ -218,16 +340,27 @@ export default function UsersPage() {
                           {loading
                             ? <Loader2 size={14} className="animate-spin text-slate-500" />
                             : <>
-                                <button onClick={() => toggleActive(user)} disabled={isMe}
-                                  title={user.active ? 'Deactivate' : 'Activate'}
-                                  className="p-1.5 rounded hover:bg-slate-700 text-slate-600 hover:text-slate-300 disabled:opacity-30 transition-colors">
-                                  {user.active ? <UserX size={13} /> : <UserCheck size={13} />}
-                                </button>
-                                <button onClick={() => deleteUser(user)} disabled={isMe}
-                                  title="Delete permanently"
-                                  className="p-1.5 rounded hover:bg-red-500/10 text-slate-600 hover:text-red-400 disabled:opacity-30 transition-colors">
-                                  <Trash2 size={13} />
-                                </button>
+                                {(isMe || me?.role === 'admin') && (
+                                  <button onClick={() => setResetUser(user)}
+                                    title={isMe ? 'Change Password' : 'Reset Password'}
+                                    className="p-1.5 rounded hover:bg-slate-700 text-slate-600 hover:text-cyan-400 transition-colors">
+                                    <KeyRound size={13} />
+                                  </button>
+                                )}
+                                {me?.role === 'admin' && (
+                                  <>
+                                    <button onClick={() => toggleActive(user)} disabled={isMe}
+                                      title={user.active ? 'Deactivate' : 'Activate'}
+                                      className="p-1.5 rounded hover:bg-slate-700 text-slate-600 hover:text-slate-300 disabled:opacity-30 transition-colors">
+                                      {user.active ? <UserX size={13} /> : <UserCheck size={13} />}
+                                    </button>
+                                    <button onClick={() => deleteUser(user)} disabled={isMe}
+                                      title="Delete permanently"
+                                      className="p-1.5 rounded hover:bg-red-500/10 text-slate-600 hover:text-red-400 disabled:opacity-30 transition-colors">
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </>
+                                )}
                               </>
                           }
                         </div>
@@ -242,6 +375,14 @@ export default function UsersPage() {
       </div>
 
       {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} onCreated={() => mutate()} />}
+      {resetUser && (
+        <ResetPasswordModal
+          user={resetUser}
+          isSelf={resetUser.id === me?.id}
+          onClose={() => setResetUser(null)}
+          onUpdated={() => mutate()}
+        />
+      )}
     </div>
   )
 }
