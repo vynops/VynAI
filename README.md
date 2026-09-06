@@ -26,6 +26,24 @@ No cloud dependency. No per-token cost. Your hardware, your models, your data.
 
 ---
 
+## Screenshots
+
+| Sign In | Fleet Overview |
+| --- | --- |
+| [<img src="screenshots/Screenshot%202026-09-01%20131934.png" alt="VynAI sign-in screen" width="100%">](screenshots/Screenshot%202026-09-01%20131934.png) | [<img src="screenshots/Screenshot%202026-09-01%20132034.png" alt="Fleet overview dashboard" width="100%">](screenshots/Screenshot%202026-09-01%20132034.png) |
+| Server Fleet | Fleet Analytics |
+| [<img src="screenshots/Screenshot%202026-09-01%20132105.png" alt="Ollama server fleet management" width="100%">](screenshots/Screenshot%202026-09-01%20132105.png) | [<img src="screenshots/Screenshot%202026-09-01%20132440.png" alt="Model inventory analytics" width="100%">](screenshots/Screenshot%202026-09-01%20132440.png) |
+| Model Storage Analysis | Model Inventory |
+| [<img src="screenshots/Screenshot%202026-09-01%20132509.png" alt="Model size and server snapshot analytics" width="100%">](screenshots/Screenshot%202026-09-01%20132509.png) | [<img src="screenshots/Screenshot%202026-09-01%20132538.png" alt="Ollama model inventory" width="100%">](screenshots/Screenshot%202026-09-01%20132538.png) |
+| OpenAI-Compatible Gateway | Token Analytics and Request Logs |
+| [<img src="screenshots/Screenshot%202026-09-01%20132619.png" alt="OpenAI-compatible API gateway and API keys" width="100%">](screenshots/Screenshot%202026-09-01%20132619.png) | [<img src="screenshots/Screenshot%202026-09-01%20132646.png" alt="Gateway request logs and token metrics" width="100%">](screenshots/Screenshot%202026-09-01%20132646.png) |
+| User Roles | Alert and Notification Settings |
+| [<img src="screenshots/Screenshot%202026-09-01%20132707.png" alt="User and role management" width="100%">](screenshots/Screenshot%202026-09-01%20132707.png) | [<img src="screenshots/Screenshot%202026-09-01%20132759.png" alt="Alert thresholds and notification channels" width="100%">](screenshots/Screenshot%202026-09-01%20132759.png) |
+| Gateway Limits and Retention | |
+| [<img src="screenshots/Screenshot%202026-09-01%20132823.png" alt="Gateway rate limits and data retention settings" width="100%">](screenshots/Screenshot%202026-09-01%20132823.png) | |
+
+---
+
 ## Features
 
 ### Fleet Management
