@@ -1,4 +1,4 @@
-
+<div align="center">
 
 # VynAI
 
@@ -11,6 +11,8 @@ Deploy, manage, and monitor multiple Ollama servers from a single dashboard. Rou
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?logo=nodedotjs)](https://nodejs.org)
 [![GitHub](https://img.shields.io/badge/GitHub-vynops%2FVynAI-181717?logo=github)](https://github.com/vynops/VynAI)
 [![Part of VynOps Suite](https://img.shields.io/badge/VynOps-Suite-06b6d4)](https://github.com/vynops)
+
+</div>
 
 ---
 
