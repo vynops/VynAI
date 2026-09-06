@@ -1,4 +1,5 @@
 <div align="center">
+
 # VynAI
 
 **Self-hosted Ollama fleet manager and OpenAI-compatible API gateway.**
