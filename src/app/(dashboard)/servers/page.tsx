@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import useSWR from 'swr'
 import { Plus, RefreshCw, ExternalLink, Trash2, Terminal, Thermometer, Zap, Activity, HardDrive, Cpu } from 'lucide-react'
 import { formatLatency, formatBytes, cn, tempColor, vramColor } from '@/lib/utils'
@@ -73,26 +73,28 @@ function ServerCard({ server, onDeleted, onSSHSaved }: { server: StoredServer; o
     `/api/servers/${server.id}/status`, fetcher, { refreshInterval: 8000 }
   )
   const hasSSH = !!(server.sshUser)
-  const { data: gpu, isLoading: gpuLoading, mutate: mutateGpu } = useSWR<SystemMetrics>(
-    hasSSH ? `/api/servers/${server.id}/gpu` : null,
-    fetcher, { refreshInterval: 12000 }
-  )
   const [showSSH, setShowSSH] = useState(false)
   const [showTerminal, setShowTerminal] = useState(false)
   const [vramHistories, setVramHistories] = useState<Record<number, VramPoint[]>>({})
 
-  useEffect(() => {
-    if (!gpu?.gpus?.length) return
-    setVramHistories(prev => {
-      const next = { ...prev }
-      for (const g of gpu.gpus) {
-        const pct = g.vramTotalMiB ? Math.round((g.vramUsedMiB / g.vramTotalMiB) * 100) : 0
-        const existing = prev[g.index] ?? []
-        next[g.index] = [...existing.slice(-59), { pct, usedGiB: g.vramUsedMiB / 1024 }]
-      }
-      return next
-    })
-  }, [gpu])
+  const { data: gpu, isLoading: gpuLoading, mutate: mutateGpu } = useSWR<SystemMetrics>(
+    hasSSH ? `/api/servers/${server.id}/gpu` : null,
+    fetcher, {
+      refreshInterval: 12000,
+      onSuccess: nextGpu => {
+        if (!nextGpu.gpus?.length) return
+        setVramHistories(prev => {
+          const next = { ...prev }
+          for (const g of nextGpu.gpus) {
+            const pct = g.vramTotalMiB ? Math.round((g.vramUsedMiB / g.vramTotalMiB) * 100) : 0
+            const existing = prev[g.index] ?? []
+            next[g.index] = [...existing.slice(-59), { pct, usedGiB: g.vramUsedMiB / 1024 }]
+          }
+          return next
+        })
+      },
+    }
+  )
 
   async function handleDelete() {
     if (!confirm(`Remove server "${server.name}"?`)) return

@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose'
+import { timingSafeEqual } from 'crypto'
 
 const COOKIE_NAME = 'vynai_session'
 const EXPIRY = '7d'
@@ -44,7 +45,6 @@ export function sessionCookieOptions(token: string, expire = false) {
 
 /** Timing-safe string comparison — prevents brute-force timing attacks */
 export function safeEqual(a: string, b: string): boolean {
-  const { timingSafeEqual } = require('crypto') as typeof import('crypto')
   if (a.length !== b.length) {
     // Run a dummy comparison so duration is constant
     const dummy = Buffer.alloc(b.length)

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, Server, Brain, Shield, BarChart3, Settings,
-  Cpu, LogOut, ScrollText, Users,
+  Cpu, LogOut, ScrollText, Users, MessageSquare, Workflow,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import useSWR from 'swr'
@@ -28,7 +28,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/models',   label: 'Models',   icon: Brain },
       { href: '/gateway',  label: 'Gateway',  icon: Shield },
+      { href: '/chat',     label: 'Fleet Chat', icon: MessageSquare },
       { href: '/logs',     label: 'Logs',     icon: ScrollText },
+    ],
+  },
+  {
+    label: 'Operate',
+    items: [
+      { href: '/automation', label: 'Automation', icon: Workflow, adminOnly: true },
     ],
   },
   {
