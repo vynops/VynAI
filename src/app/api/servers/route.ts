@@ -19,7 +19,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Basic URL validation
-  try { new URL(url) } catch {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return NextResponse.json({ error: 'url must use http or https' }, { status: 400 })
+    }
+  } catch {
     return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 })
   }
 

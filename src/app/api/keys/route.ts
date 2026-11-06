@@ -16,6 +16,12 @@ export async function POST(req: NextRequest) {
   let body: { name?: string; rateLimitRpm?: number; rateLimitTpm?: number | null; allowedModels?: string[] | null }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
   if (!body.name?.trim()) return NextResponse.json({ error: 'name is required' }, { status: 400 })
+  if (body.rateLimitRpm !== undefined && (!Number.isInteger(body.rateLimitRpm) || body.rateLimitRpm < 0)) {
+    return NextResponse.json({ error: 'rateLimitRpm must be a non-negative integer' }, { status: 400 })
+  }
+  if (body.rateLimitTpm !== undefined && body.rateLimitTpm !== null && (!Number.isInteger(body.rateLimitTpm) || body.rateLimitTpm < 1)) {
+    return NextResponse.json({ error: 'rateLimitTpm must be a positive integer or null' }, { status: 400 })
+  }
   const key = createKey({ ...body, name: body.name })
   const { keyFull, ...safe } = key
   // Return the full key once on creation (user must copy it now)

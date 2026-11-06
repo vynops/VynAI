@@ -27,6 +27,9 @@ export async function sendEmail(config: SmtpConfig, to: string[], subject: strin
     host: config.host,
     port: config.port,
     secure: config.port === 465,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
     auth: { user: config.user, pass: config.pass },
   })
 

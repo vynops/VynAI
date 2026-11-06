@@ -15,17 +15,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { model } = body
   if (!model?.trim()) return NextResponse.json({ error: 'model is required' }, { status: 400 })
 
-  // Kick off pull — Ollama streams progress; we fire-and-forget here
-  // In a real implementation you'd stream the response back
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10_000)
+  let response: Response
   try {
-    fetch(`${server.url}/api/pull`, {
+    response = await fetch(`${server.url}/api/pull`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: model.trim(), stream: false }),
-    }).catch(() => null)
-
-    return NextResponse.json({ ok: true, message: `Pull started for ${model}` })
-  } catch {
-    return NextResponse.json({ error: 'Failed to initiate pull' }, { status: 502 })
+      body: JSON.stringify({ model: model.trim(), stream: true }),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to reach Ollama server' }, { status: 502 })
+  } finally {
+    clearTimeout(timeout)
   }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '')
+    return NextResponse.json({ error: detail || `Ollama returned HTTP ${response.status}` }, { status: 502 })
+  }
+
+  if (response.body) void response.body.pipeTo(new WritableStream()).catch(() => undefined)
+  return NextResponse.json({ ok: true, message: `Pull accepted for ${model.trim()}` }, { status: 202 })
 }

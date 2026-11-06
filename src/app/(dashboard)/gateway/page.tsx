@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { Plus, Copy, Trash2, Shield, Key, Check, AlertCircle, Loader2, X, Eye, EyeOff, Terminal, Code2 } from 'lucide-react'
+import { Plus, Copy, Trash2, Shield, Key, Check, AlertCircle, Loader2, X, Eye, EyeOff, Terminal, Code2, Search, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 interface ApiKey {
-  id: string; name: string; keyMasked: string; createdAt: string
+  id: string; name: string; keyMasked: string; createdAt: string; lastUsedAt: string | null
   status: 'active' | 'revoked'; rateLimitRpm: number; rateLimitTpm: number | null
   allowedModels: string[] | null; requestsTotal: number
   tokensPrompt: number; tokensCompletion: number
@@ -17,14 +17,15 @@ interface ApiKey {
 
 interface AggregatedModel { name: string }
 
-function CreateKeyModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [name, setName] = useState('')
-  const [rpm, setRpm] = useState('60')
+function CreateKeyModal({ onClose, onCreated, editing }: { onClose: () => void; onCreated: () => void; editing?: ApiKey }) {
+  const [name, setName] = useState(editing?.name ?? '')
+  const [rpm, setRpm] = useState(String(editing?.rateLimitRpm ?? 60))
+  const [tpm, setTpm] = useState(editing?.rateLimitTpm == null ? '' : String(editing.rateLimitTpm))
   const [saving, setSaving] = useState(false)
   const [newKey, setNewKey] = useState<{ keyFull: string; keyMasked: string } | null>(null)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedModels, setSelectedModels] = useState<string[]>([])
+  const [selectedModels, setSelectedModels] = useState<string[]>(editing?.allowedModels ?? [])
   const [modelSearch, setModelSearch] = useState('')
   const { data: allModels = [] } = useSWR<AggregatedModel[]>('/api/models', fetcher)
 
@@ -40,16 +41,20 @@ function CreateKeyModal({ onClose, onCreated }: { onClose: () => void; onCreated
 
   async function handleCreate() {
     setSaving(true); setError(null)
-    const res = await fetch('/api/keys', {
-      method: 'POST',
+    const res = await fetch(editing ? `/api/keys/${editing.id}` : '/api/keys', {
+      method: editing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name, rateLimitRpm: Number(rpm),
+        rateLimitTpm: tpm.trim() ? Number(tpm) : null,
         allowedModels: selectedModels.length > 0 ? selectedModels : null,
       }),
     })
     const data = await res.json()
-    if (res.ok) { setNewKey(data); onCreated() }
+    if (res.ok) {
+      if (editing) { onCreated(); onClose() }
+      else { setNewKey(data); onCreated() }
+    }
     else setError(data.error ?? 'Failed to create key')
     setSaving(false)
   }
@@ -78,7 +83,7 @@ function CreateKeyModal({ onClose, onCreated }: { onClose: () => void; onCreated
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-cyan-500/10"><Key size={15} className="text-cyan-400" /></div>
-            <h2 className="text-sm font-bold text-white">Create API Key</h2>
+            <h2 className="text-sm font-bold text-white">{editing ? 'Edit API Key' : 'Create API Key'}</h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800"><X size={15} /></button>
         </div>
@@ -117,6 +122,11 @@ function CreateKeyModal({ onClose, onCreated }: { onClose: () => void; onCreated
                 className="w-full px-3 py-2.5 rounded-lg border border-slate-700 bg-slate-950 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/60 transition-all" />
             </div>
             <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Token Limit (tokens / min, blank = unlimited)</label>
+              <input type="number" min="1" value={tpm} onChange={e => setTpm(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-700 bg-slate-950 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/60 transition-all" />
+            </div>
+            <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-medium text-slate-400">Allowed Models</label>
                 <span className="text-xs text-slate-500">
@@ -148,7 +158,7 @@ function CreateKeyModal({ onClose, onCreated }: { onClose: () => void; onCreated
               <button onClick={handleCreate} disabled={!name.trim() || saving}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-white text-sm font-semibold">
                 {saving && <Loader2 size={13} className="animate-spin" />}
-                {saving ? 'Creating…' : 'Create Key'}
+                {saving ? (editing ? 'Saving…' : 'Creating…') : (editing ? 'Save Changes' : 'Create Key')}
               </button>
             </div>
           </div>
@@ -284,8 +294,22 @@ export default function GatewayPage() {
   const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({})
   const [loadingReveal, setLoadingReveal] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [editingKey, setEditingKey] = useState<ApiKey | null>(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'revoked'>('all')
+  const [sortBy, setSortBy] = useState<'recent' | 'name' | 'last-used' | 'requests'>('recent')
 
   const active = keys.filter(k => k.status === 'active')
+  const visibleKeys = [...keys]
+    .filter(key => statusFilter === 'all' || key.status === statusFilter)
+    .filter(key => !search.trim() || `${key.name} ${key.allowedModels?.join(' ') ?? 'all models'}`.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => sortBy === 'name'
+      ? a.name.localeCompare(b.name)
+      : sortBy === 'last-used'
+      ? (b.lastUsedAt ? Date.parse(b.lastUsedAt) : 0) - (a.lastUsedAt ? Date.parse(a.lastUsedAt) : 0)
+      : sortBy === 'requests'
+      ? b.requestsTotal - a.requestsTotal
+      : Date.parse(b.createdAt) - Date.parse(a.createdAt))
 
   async function handleReveal(id: string) {
     if (revealedKeys[id]) {
@@ -366,6 +390,21 @@ export default function GatewayPage() {
           <h3 className="text-sm font-bold text-white">API Keys</h3>
           <span className="text-xs text-slate-500">{active.length} active · {keys.length - active.length} revoked</span>
         </div>
+        <div className="flex flex-col gap-2 border-b border-slate-800 px-4 py-3 sm:flex-row">
+          <label className="relative min-w-0 flex-1">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search keys or model scope"
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 py-2 pl-9 pr-3 text-xs text-slate-200 placeholder-slate-600" />
+          </label>
+          <select aria-label="Filter key status" value={statusFilter} onChange={event => setStatusFilter(event.target.value as typeof statusFilter)}
+            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300">
+            <option value="all">All statuses</option><option value="active">Active</option><option value="revoked">Revoked</option>
+          </select>
+          <select aria-label="Sort keys" value={sortBy} onChange={event => setSortBy(event.target.value as typeof sortBy)}
+            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300">
+            <option value="recent">Newest</option><option value="name">Name</option><option value="last-used">Last used</option><option value="requests">Most requests</option>
+          </select>
+        </div>
         {keys.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-slate-500 gap-2">
             <Key size={24} className="opacity-30" />
@@ -377,13 +416,13 @@ export default function GatewayPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-800">
-                  {['Name', 'Key', 'Status', 'Rate Limit', 'Requests', 'Tokens', 'Created', ''].map(h => (
+                  {['Name', 'Key', 'Status', 'Rate Limit', 'Models', 'Requests', 'Tokens', 'Created', 'Last Used', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-slate-500 font-semibold uppercase tracking-wide text-xs whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {keys.map((key, i) => (
+                {visibleKeys.map((key, i) => (
                   <tr key={key.id} className={cn('border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors',
                     i % 2 ? 'bg-slate-950/20' : '', key.status === 'revoked' && 'opacity-50')}>
                     <td className="px-4 py-3 font-semibold text-white whitespace-nowrap">{key.name}</td>
@@ -421,6 +460,10 @@ export default function GatewayPage() {
                     <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
                       {key.rateLimitRpm} rpm · {key.rateLimitTpm ? `${key.rateLimitTpm} tpm` : '∞ tpm'}
                     </td>
+                    <td className="px-4 py-3 text-xs text-slate-400" title={key.allowedModels?.join(', ') ?? 'All models'}>
+                      {key.allowedModels?.length ? `${key.allowedModels.length} scoped` : 'All models'}
+                      {key.allowedModels && key.allowedModels.length > 0 && <div className="max-w-36 truncate text-[10px] text-slate-500">{key.allowedModels.join(', ')}</div>}
+                    </td>
                     <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{key.requestsTotal.toLocaleString()}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {(key.tokensPrompt || key.tokensCompletion)
@@ -455,8 +498,16 @@ export default function GatewayPage() {
                     <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
                       {new Date(key.createdAt).toLocaleDateString()}
                     </td>
+                    <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
+                      {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : 'Never'}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
+                        {key.status === 'active' && (
+                          <button onClick={() => setEditingKey(key)} className="p-1.5 rounded hover:bg-cyan-500/10 text-slate-600 hover:text-cyan-400 transition-colors" title="Edit limits and model scope">
+                            <Pencil size={12} />
+                          </button>
+                        )}
                         {key.status === 'active' && (
                           <button onClick={() => handleRevoke(key.id)}
                             className="p-1.5 rounded hover:bg-yellow-500/10 text-slate-600 hover:text-yellow-400 text-xs transition-colors" title="Revoke">
@@ -473,11 +524,13 @@ export default function GatewayPage() {
                 ))}
               </tbody>
             </table>
+            {visibleKeys.length === 0 && <div className="py-8 text-center text-xs text-slate-500">No keys match these filters.</div>}
           </div>
         )}
       </div>
 
       {showCreate && <CreateKeyModal onClose={() => setShowCreate(false)} onCreated={() => mutate()} />}
+      {editingKey && <CreateKeyModal editing={editingKey} onClose={() => setEditingKey(null)} onCreated={() => mutate()} />}
     </div>
   )
 }

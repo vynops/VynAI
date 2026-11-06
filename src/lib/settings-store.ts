@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { writeJsonAtomically } from '@/lib/json-storage'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json')
@@ -66,6 +67,6 @@ export function saveSettings(partial: Partial<AppSettings>): AppSettings {
   const current = loadSettings()
   const next = { ...current, ...partial }
   ensure()
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2))
+  writeJsonAtomically(SETTINGS_FILE, next)
   return next
 }

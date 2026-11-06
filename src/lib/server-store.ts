@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import { randomUUID } from 'crypto'
+import { loadSettings } from '@/lib/settings-store'
+import { writeJsonAtomically } from '@/lib/json-storage'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const SERVERS_FILE = path.join(DATA_DIR, 'servers.json')
@@ -18,6 +20,25 @@ export interface StoredServer {
 
 function ensure() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
+  if (fs.existsSync(SERVERS_FILE)) return
+
+  const defaultUrl = loadSettings().defaultOllamaUrl.trim() || process.env.DEFAULT_OLLAMA_URL?.trim()
+  if (!defaultUrl) return
+
+  try {
+    const parsed = new URL(defaultUrl)
+    if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || parsed.username || parsed.password) return
+    writeJsonAtomically(SERVERS_FILE, {
+      servers: [{
+        id: randomUUID(),
+        name: parsed.hostname,
+        url: defaultUrl.replace(/\/+$/, ''),
+        addedAt: new Date().toISOString(),
+      }],
+    })
+  } catch {
+    // Ignore invalid optional defaults and let an admin add a server normally.
+  }
 }
 
 export function listServers(): StoredServer[] {
@@ -37,7 +58,7 @@ export function addServer(input: { name: string; url: string }): StoredServer {
   }
   const servers = [...listServers(), server]
   ensure()
-  fs.writeFileSync(SERVERS_FILE, JSON.stringify({ servers }, null, 2))
+  writeJsonAtomically(SERVERS_FILE, { servers })
   return server
 }
 
@@ -45,7 +66,7 @@ export function removeServer(id: string): boolean {
   const before = listServers()
   const after = before.filter(s => s.id !== id)
   if (before.length === after.length) return false
-  fs.writeFileSync(SERVERS_FILE, JSON.stringify({ servers: after }, null, 2))
+  writeJsonAtomically(SERVERS_FILE, { servers: after })
   return true
 }
 
@@ -59,6 +80,6 @@ export function updateServer(id: string, patch: Partial<Omit<StoredServer, 'id' 
   if (idx < 0) return null
   servers[idx] = { ...servers[idx], ...patch }
   ensure()
-  fs.writeFileSync(SERVERS_FILE, JSON.stringify({ servers }, null, 2))
+  writeJsonAtomically(SERVERS_FILE, { servers })
   return servers[idx]
 }

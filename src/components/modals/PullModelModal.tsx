@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { X, Download, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import type { StoredServer } from '@/lib/server-store'
 
 interface Props {
   servers: StoredServer[]
   defaultServerId?: string
+  defaultModel?: string
   onClose: () => void
   onPulled: () => void
 }
@@ -16,11 +18,11 @@ const POPULAR = [
   'codestral', 'deepseek-coder-v2', 'nomic-embed-text', 'mxbai-embed-large',
 ]
 
-export default function PullModelModal({ servers, defaultServerId, onClose, onPulled }: Props) {
-  const [model, setModel] = useState('')
+export default function PullModelModal({ servers, defaultServerId, defaultModel, onClose, onPulled }: Props) {
+  const [model, setModel] = useState(defaultModel ?? '')
   const [serverId, setServerId] = useState(defaultServerId ?? servers[0]?.id ?? '')
   const [pulling, setPulling] = useState(false)
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [result, setResult] = useState<{ ok: boolean; message: string; jobId?: string } | null>(null)
 
   async function handlePull() {
     if (!model.trim() || !serverId) return
@@ -34,7 +36,7 @@ export default function PullModelModal({ servers, defaultServerId, onClose, onPu
       })
       const data = await res.json()
       if (res.ok) {
-        setResult({ ok: true, message: `Pull started — check the server in a few minutes` })
+        setResult({ ok: true, message: 'Pull queued for administrator approval.', jobId: data.id })
         onPulled()
       } else {
         setResult({ ok: false, message: data.error ?? 'Pull failed' })
@@ -122,12 +124,12 @@ export default function PullModelModal({ servers, defaultServerId, onClose, onPu
                 : 'border-red-500/20 bg-red-500/5 text-red-400'
             }`}>
               {result.ok ? <CheckCircle size={12} className="mt-0.5 flex-shrink-0" /> : <AlertCircle size={12} className="mt-0.5 flex-shrink-0" />}
-              {result.message}
+              <span>{result.message}{result.jobId && <> <Link href="/automation" className="ml-1 underline">View job status</Link></>}</span>
             </div>
           )}
 
           <p className="text-xs text-slate-500 leading-relaxed">
-            Pull runs in the background. Large models can take several minutes.{' '}
+            Model pulls require approval. Progress and completion are available in Automation.{' '}
             <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline">Browse Ollama library →</a>
           </p>
 

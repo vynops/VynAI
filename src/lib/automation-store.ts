@@ -1,12 +1,19 @@
 import fs from 'fs'
 import path from 'path'
 import { randomUUID } from 'crypto'
+import { writeJsonAtomically } from '@/lib/json-storage'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const JOBS_FILE = path.join(DATA_DIR, 'automation-jobs.json')
 
 export type AutomationAction = 'health_check' | 'diagnose' | 'model_pull'
-export type AutomationStatus = 'pending_approval' | 'queued' | 'running' | 'succeeded' | 'failed' | 'rejected'
+export type AutomationStatus = 'pending_approval' | 'queued' | 'running' | 'succeeded' | 'failed' | 'rejected' | 'cancelled'
+
+export interface AutomationProgress {
+  status?: string
+  completed?: number
+  total?: number
+}
 
 export interface AutomationJob {
   id: string
@@ -21,6 +28,7 @@ export interface AutomationJob {
   finishedAt?: string
   output?: string
   error?: string
+  progress?: AutomationProgress
 }
 
 function ensure() {
@@ -35,7 +43,7 @@ function readJobs(): AutomationJob[] {
 
 function writeJobs(jobs: AutomationJob[]) {
   ensure()
-  fs.writeFileSync(JOBS_FILE, JSON.stringify({ jobs: jobs.slice(-500) }, null, 2))
+  writeJsonAtomically(JOBS_FILE, { jobs: jobs.slice(-500) })
 }
 
 export function listJobs(): AutomationJob[] {

@@ -5,8 +5,34 @@
 
 // keyId → array of request timestamps (ms)
 const windows = new Map<string, number[]>()
+const loginWindows = new Map<string, number[]>()
+const keyTokenWindows = new Map<string, Array<{ ts: number; tokens: number }>>()
 const globalWindow: number[] = []
 const tokenWindow: Array<{ ts: number; tokens: number }> = []
+const loginGlobalWindow: number[] = []
+
+export function checkLoginRateLimit(email: string): boolean {
+  const now = Date.now()
+  const cutoff = now - 60_000
+  while (loginGlobalWindow.length && loginGlobalWindow[0] <= cutoff) loginGlobalWindow.shift()
+  if (loginGlobalWindow.length >= 120) return false
+
+  const key = email.trim().toLowerCase() || '<empty>'
+  const attempts = (loginWindows.get(key) ?? []).filter(timestamp => timestamp > cutoff)
+  if (attempts.length >= 10) {
+    loginWindows.set(key, attempts)
+    return false
+  }
+  attempts.push(now)
+  loginWindows.set(key, attempts)
+  loginGlobalWindow.push(now)
+
+  if (loginWindows.size > 10_000) {
+    const oldestKey = loginWindows.keys().next().value
+    if (oldestKey) loginWindows.delete(oldestKey)
+  }
+  return true
+}
 
 /**
  * Returns true if the request is allowed, false if rate limit exceeded.
@@ -26,6 +52,14 @@ export function checkRateLimit(keyId: string, limitRpm: number): boolean {
   timestamps.push(now)
   windows.set(keyId, timestamps)
   return true
+}
+
+export function checkKeyTokenLimit(keyId: string, limitTpm: number | null): boolean {
+  if (!limitTpm || limitTpm <= 0) return true
+  const cutoff = Date.now() - 60_000
+  const usage = (keyTokenWindows.get(keyId) ?? []).filter(entry => entry.ts > cutoff)
+  keyTokenWindows.set(keyId, usage)
+  return usage.reduce((sum, entry) => sum + entry.tokens, 0) < limitTpm
 }
 
 /**
@@ -69,4 +103,12 @@ export function checkGlobalTokenLimit(limitTpm: number | null): boolean {
 export function addGlobalTokenUsage(tokens: number): void {
   if (tokens <= 0) return
   tokenWindow.push({ ts: Date.now(), tokens })
+}
+
+export function addKeyTokenUsage(keyId: string, tokens: number): void {
+  if (tokens <= 0) return
+  const cutoff = Date.now() - 60_000
+  const usage = (keyTokenWindows.get(keyId) ?? []).filter(entry => entry.ts > cutoff)
+  usage.push({ ts: Date.now(), tokens })
+  keyTokenWindows.set(keyId, usage)
 }

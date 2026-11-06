@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { randomBytes, scryptSync, timingSafeEqual } from 'crypto'
+import { writeJsonAtomically } from '@/lib/json-storage'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const USERS_FILE = path.join(DATA_DIR, 'users.json')
@@ -11,9 +12,19 @@ export interface StoredUser {
   name: string
   passwordHash: string   // format: "salt:hash" (scrypt)
   role: 'admin' | 'viewer'
+  authVersion: number
   createdAt: string
   lastLoginAt: string | null
   active: boolean
+}
+
+export type PublicUser = Omit<StoredUser, 'passwordHash' | 'authVersion'>
+
+export function toPublicUser(user: StoredUser): PublicUser {
+  const result: Partial<StoredUser> = { ...user }
+  delete result.passwordHash
+  delete result.authVersion
+  return result as PublicUser
 }
 
 function ensure() {
@@ -40,12 +51,18 @@ export function verifyPassword(password: string, stored: string): boolean {
 export function listUsers(): StoredUser[] {
   ensure()
   if (!fs.existsSync(USERS_FILE)) return []
-  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8')).users ?? [] } catch { return [] }
+  try {
+    const users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8')).users ?? []
+    return users.map((user: StoredUser) => ({
+      ...user,
+      authVersion: Number.isSafeInteger(user.authVersion) && user.authVersion >= 0 ? user.authVersion : 0,
+    }))
+  } catch { return [] }
 }
 
 function saveUsers(users: StoredUser[]): void {
   ensure()
-  fs.writeFileSync(USERS_FILE, JSON.stringify({ users }, null, 2))
+  writeJsonAtomically(USERS_FILE, { users })
 }
 
 export function getUserByEmail(email: string): StoredUser | null {
@@ -73,6 +90,7 @@ export function createUser(input: {
     name: input.name.trim(),
     passwordHash: hashPassword(input.password),
     role: input.role,
+    authVersion: 0,
     createdAt: new Date().toISOString(),
     lastLoginAt: null,
     active: true,
@@ -88,16 +106,40 @@ export function updateUser(
   const users = listUsers()
   const idx = users.findIndex(u => u.id === id)
   if (idx < 0) return false
-  users[idx] = { ...users[idx], ...updates }
+  const credentialsChanged =
+    (updates.role !== undefined && updates.role !== users[idx].role) ||
+    (updates.active !== undefined && updates.active !== users[idx].active)
+  users[idx] = {
+    ...users[idx],
+    ...updates,
+    authVersion: users[idx].authVersion + (credentialsChanged ? 1 : 0),
+  }
   saveUsers(users)
   return true
+}
+
+export function wouldRemoveLastActiveAdmin(
+  users: readonly StoredUser[],
+  id: string,
+  updates: Partial<Pick<StoredUser, 'role' | 'active'>>
+): boolean {
+  const target = users.find(user => user.id === id)
+  if (!target || target.role !== 'admin' || !target.active) return false
+  const remainsAdmin = (updates.role ?? target.role) === 'admin'
+  const remainsActive = (updates.active ?? target.active) === true
+  return (!remainsAdmin || !remainsActive) &&
+    users.filter(user => user.role === 'admin' && user.active).length <= 1
 }
 
 export function changePassword(id: string, newPassword: string): boolean {
   const users = listUsers()
   const idx = users.findIndex(u => u.id === id)
   if (idx < 0) return false
-  users[idx] = { ...users[idx], passwordHash: hashPassword(newPassword) }
+  users[idx] = {
+    ...users[idx],
+    passwordHash: hashPassword(newPassword),
+    authVersion: users[idx].authVersion + 1,
+  }
   saveUsers(users)
   return true
 }

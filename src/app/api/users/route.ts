@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser, requireAdmin } from '@/lib/auth'
-import { listUsers, createUser, getUserByEmail } from '@/lib/user-store'
+import { listUsers, createUser, getUserByEmail, toPublicUser } from '@/lib/user-store'
 
 export async function GET(req: NextRequest) {
   const session = await getSessionUser(req)
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     : allUsers.filter(u => u.email.toLowerCase() === session.email.toLowerCase())
 
   // Strip passwordHash before returning
-  return NextResponse.json(users.map(({ passwordHash: _ph, ...u }) => u))
+  return NextResponse.json(users.map(toPublicUser))
 }
 
 export async function POST(req: NextRequest) {
@@ -29,8 +29,8 @@ export async function POST(req: NextRequest) {
 
   if (getUserByEmail(body.email)) return NextResponse.json({ error: 'Email already in use' }, { status: 409 })
 
-  const { passwordHash: _ph, ...user } = createUser({
+  const user = createUser({
     email: body.email, name: body.name, password: body.password, role: body.role!,
   })
-  return NextResponse.json(user, { status: 201 })
+  return NextResponse.json(toPublicUser(user), { status: 201 })
 }

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validateKey, incrementUsage, addTokenUsage } from '@/lib/key-store'
+import { validateKey, incrementUsage, markKeyUsed, addTokenUsage } from '@/lib/key-store'
 import { appendLog } from '@/lib/request-log-store'
-import { checkRateLimit, checkGlobalRateLimit, checkGlobalTokenLimit, addGlobalTokenUsage } from '@/lib/rate-limiter'
+import { checkRateLimit, checkKeyTokenLimit, checkGlobalRateLimit, checkGlobalTokenLimit, addKeyTokenUsage, addGlobalTokenUsage } from '@/lib/rate-limiter'
 import { listServers } from '@/lib/server-store'
 import { ollamaStatus } from '@/lib/ollama'
 import { loadSettings } from '@/lib/settings-store'
-import { canSendRateLimitAlert, sendRateLimitAlerts } from '@/lib/alert-tracker'
+import { canSendRateLimitAlert, clearRateLimitAlert, sendRateLimitAlerts } from '@/lib/alert-tracker'
 
 // Round-robin counter (in-memory)
 let rrIndex = 0
@@ -15,6 +15,13 @@ function errorJson(status: number, message: string, code: string) {
     { error: { message, type: 'invalid_request_error', code } },
     { status }
   )
+}
+
+function logFailure(key: { id: string; name: string }, model: string, status: number, error: string, startTime: number) {
+  appendLog({
+    timestamp: new Date().toISOString(), keyId: key.id, keyName: key.name, model,
+    promptTokens: 0, completionTokens: 0, latencyMs: Date.now() - startTime, status, error,
+  })
 }
 
 export async function POST(req: NextRequest) {
@@ -27,6 +34,7 @@ export async function POST(req: NextRequest) {
 
   const apiKey = validateKey(token)
   if (!apiKey) return errorJson(401, 'Invalid or revoked API key', 'invalid_api_key')
+  markKeyUsed(apiKey.id)
 
   const settings = loadSettings()
 
@@ -34,7 +42,7 @@ export async function POST(req: NextRequest) {
   if (!checkGlobalRateLimit(settings.globalRpm)) {
     appendLog({ timestamp: new Date().toISOString(), keyId: apiKey.id, keyName: apiKey.name, model: '', promptTokens: 0, completionTokens: 0, latencyMs: Date.now() - startTime, status: 429, error: 'Global RPM limit exceeded' })
     if (settings.alertOnRateLimit && canSendRateLimitAlert('global-rpm')) {
-      void sendRateLimitAlerts(settings, `Global RPM exceeded (${settings.globalRpm} req/min)`)
+      void sendRateLimitAlerts(settings, `Global RPM exceeded (${settings.globalRpm} req/min)`).catch(() => clearRateLimitAlert('global-rpm'))
     }
     return errorJson(429, `Global rate limit exceeded: ${settings.globalRpm} req/min`, 'global_rate_limit_exceeded')
   }
@@ -42,7 +50,7 @@ export async function POST(req: NextRequest) {
   if (!checkGlobalTokenLimit(settings.globalTpm)) {
     appendLog({ timestamp: new Date().toISOString(), keyId: apiKey.id, keyName: apiKey.name, model: '', promptTokens: 0, completionTokens: 0, latencyMs: Date.now() - startTime, status: 429, error: 'Global TPM limit exceeded' })
     if (settings.alertOnRateLimit && canSendRateLimitAlert('global-tpm')) {
-      void sendRateLimitAlerts(settings, `Global TPM exceeded (${settings.globalTpm ?? 0} tokens/min)`)
+      void sendRateLimitAlerts(settings, `Global TPM exceeded (${settings.globalTpm ?? 0} tokens/min)`).catch(() => clearRateLimitAlert('global-tpm'))
     }
     return errorJson(429, 'Global token rate limit exceeded', 'global_token_rate_limit_exceeded')
   }
@@ -50,9 +58,15 @@ export async function POST(req: NextRequest) {
   if (!checkRateLimit(apiKey.id, apiKey.rateLimitRpm)) {
     appendLog({ timestamp: new Date().toISOString(), keyId: apiKey.id, keyName: apiKey.name, model: '', promptTokens: 0, completionTokens: 0, latencyMs: Date.now() - startTime, status: 429, error: 'Rate limit exceeded' })
     if (settings.alertOnRateLimit && canSendRateLimitAlert(`key-rpm-${apiKey.id}`)) {
-      void sendRateLimitAlerts(settings, `Key "${apiKey.name}" exceeded ${apiKey.rateLimitRpm} req/min`)
+      const alertKey = `key-rpm-${apiKey.id}`
+      void sendRateLimitAlerts(settings, `Key "${apiKey.name}" exceeded ${apiKey.rateLimitRpm} req/min`).catch(() => clearRateLimitAlert(alertKey))
     }
     return errorJson(429, `Rate limit exceeded: ${apiKey.rateLimitRpm} req/min`, 'rate_limit_exceeded')
+  }
+
+  if (!checkKeyTokenLimit(apiKey.id, apiKey.rateLimitTpm ?? null)) {
+    logFailure(apiKey, '', 429, 'Key TPM limit exceeded', startTime)
+    return errorJson(429, `Token rate limit exceeded: ${apiKey.rateLimitTpm} tokens/min`, 'token_rate_limit_exceeded')
   }
 
   // ── 3. Parse request body ─────────────────────────────────────────────────
@@ -65,16 +79,35 @@ export async function POST(req: NextRequest) {
     top_p?: number
   }
   try { body = await req.json() } catch {
+    logFailure(apiKey, '', 400, 'Invalid JSON body', startTime)
     return errorJson(400, 'Invalid JSON body', 'invalid_body')
   }
 
-  if (!body.model) return errorJson(400, 'model is required', 'missing_model')
+  if (!body.model) {
+    logFailure(apiKey, '', 400, 'model is required', startTime)
+    return errorJson(400, 'model is required', 'missing_model')
+  }
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
+    logFailure(apiKey, body.model, 400, 'messages array is required', startTime)
     return errorJson(400, 'messages array is required', 'missing_messages')
+  }
+
+  if (body.temperature !== undefined && (!Number.isFinite(body.temperature) || body.temperature < 0 || body.temperature > 2)) {
+    logFailure(apiKey, body.model, 400, 'temperature must be between 0 and 2', startTime)
+    return errorJson(400, 'temperature must be between 0 and 2', 'invalid_temperature')
+  }
+  if (body.max_tokens !== undefined && (!Number.isInteger(body.max_tokens) || body.max_tokens < 1)) {
+    logFailure(apiKey, body.model, 400, 'max_tokens must be a positive integer', startTime)
+    return errorJson(400, 'max_tokens must be a positive integer', 'invalid_max_tokens')
+  }
+  if (body.top_p !== undefined && (!Number.isFinite(body.top_p) || body.top_p < 0 || body.top_p > 1)) {
+    logFailure(apiKey, body.model, 400, 'top_p must be between 0 and 1', startTime)
+    return errorJson(400, 'top_p must be between 0 and 1', 'invalid_top_p')
   }
 
   // Check allowedModels restriction
   if (apiKey.allowedModels && !apiKey.allowedModels.includes(body.model)) {
+    logFailure(apiKey, body.model, 403, 'Model not allowed for this key', startTime)
     return errorJson(403, `Model "${body.model}" is not allowed for this key`, 'model_not_allowed')
   }
 
@@ -82,7 +115,10 @@ export async function POST(req: NextRequest) {
 
   // ── 4. Pick an online Ollama server (round-robin) ─────────────────────────
   const servers = listServers()
-  if (servers.length === 0) return errorJson(503, 'No Ollama servers configured', 'no_servers')
+  if (servers.length === 0) {
+    logFailure(apiKey, body.model, 503, 'No Ollama servers configured', startTime)
+    return errorJson(503, 'No Ollama servers configured', 'no_servers')
+  }
 
   // Try servers starting from rrIndex, skip offline ones
   let target: string | null = null
@@ -106,7 +142,13 @@ export async function POST(req: NextRequest) {
     model: body.model,
     messages: body.messages,
     stream: shouldStream,
-    ...(body.temperature !== undefined && { options: { temperature: body.temperature } }),
+    ...((body.temperature !== undefined || body.max_tokens !== undefined || body.top_p !== undefined) && {
+      options: {
+        ...(body.temperature !== undefined && { temperature: body.temperature }),
+        ...(body.max_tokens !== undefined && { num_predict: body.max_tokens }),
+        ...(body.top_p !== undefined && { top_p: body.top_p }),
+      },
+    }),
   }
 
   let ollamaRes: Response
@@ -117,6 +159,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(ollamaPayload),
     })
   } catch {
+    logFailure(apiKey, body.model, 502, 'Failed to reach Ollama server', startTime)
     return errorJson(502, 'Failed to reach Ollama server', 'upstream_error')
   }
 
@@ -163,6 +206,7 @@ export async function POST(req: NextRequest) {
                   const pt = chunk.prompt_eval_count ?? 0
                   const ct = chunk.eval_count ?? 0
                   if (pt || ct) addTokenUsage(keyId, body.model!, pt, ct)
+                  addKeyTokenUsage(keyId, pt + ct)
                   addGlobalTokenUsage(pt + ct)
                   appendLog({ timestamp: new Date().toISOString(), keyId, keyName: apiKey.name, model: body.model!, promptTokens: pt, completionTokens: ct, latencyMs: Date.now() - startTime, status: 200 })
                   // Final chunk — emit finish then DONE
@@ -213,6 +257,8 @@ export async function POST(req: NextRequest) {
   const text = await ollamaRes.text()
   const lines = text.trim().split('\n').filter(Boolean)
   let fullContent = ''
+  let promptTokenCount = 0
+  let completionTokenCount = 0
 
   if (lines.length === 1) {
     // Single JSON object (stream:false Ollama response)
@@ -222,7 +268,10 @@ export async function POST(req: NextRequest) {
       fullContent = parsed.message?.content ?? parsed.response ?? ''
       const pt = parsed.prompt_eval_count ?? 0
       const ct = parsed.eval_count ?? 0
+      promptTokenCount = pt
+      completionTokenCount = ct
       if (pt || ct) addTokenUsage(keyId, body.model!, pt, ct)
+      addKeyTokenUsage(keyId, pt + ct)
       addGlobalTokenUsage(pt + ct)
       appendLog({ timestamp: new Date().toISOString(), keyId, keyName: apiKey.name, model: body.model!, promptTokens: pt, completionTokens: ct, latencyMs: Date.now() - startTime, status: 200 })
     } catch { /* skip */ }
@@ -235,7 +284,10 @@ export async function POST(req: NextRequest) {
         if (chunk.done) {
           const pt = chunk.prompt_eval_count ?? 0
           const ct = chunk.eval_count ?? 0
+          promptTokenCount += pt
+          completionTokenCount += ct
           if (pt || ct) addTokenUsage(keyId, body.model!, pt, ct)
+          addKeyTokenUsage(keyId, pt + ct)
           addGlobalTokenUsage(pt + ct)
           appendLog({ timestamp: new Date().toISOString(), keyId, keyName: apiKey.name, model: body.model!, promptTokens: pt, completionTokens: ct, latencyMs: Date.now() - startTime, status: 200 })
         }
@@ -253,6 +305,10 @@ export async function POST(req: NextRequest) {
       message: { role: 'assistant', content: fullContent },
       finish_reason: 'stop',
     }],
-    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    usage: {
+      prompt_tokens: promptTokenCount,
+      completion_tokens: completionTokenCount,
+      total_tokens: promptTokenCount + completionTokenCount,
+    },
   })
 }

@@ -3,7 +3,7 @@ import { getServer } from '@/lib/server-store'
 import { Client } from 'ssh2'
 import { requireAdmin } from '@/lib/auth'
 
-// Destructive commands that are blocked regardless of user intent
+// This basic blocklist is not a sandbox; access must be treated as a full remote shell.
 const BLOCKED_PATTERNS = [
   'rm -rf /', 'sudo rm -rf', 'mkfs', 'dd if=/dev/zero', 'dd if=/dev/random',
   ':(){', '>(', 'chmod -r /', 'chown -r /', 'shutdown', 'reboot', 'halt', 'poweroff', 'init 0',

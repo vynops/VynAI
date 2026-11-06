@@ -7,23 +7,27 @@ const EXPIRY = '7d'
 function getSecret(): Uint8Array {
   const secret = process.env.VYNAI_SECRET
   if (!secret) {
-    console.warn('[VynAI] VYNAI_SECRET not set — using insecure dev default. Set it in .env.local.')
+    throw new Error('VYNAI_SECRET must be configured')
   }
-  return new TextEncoder().encode(secret ?? 'dev-secret-do-not-use-in-production')
+  return new TextEncoder().encode(secret)
 }
 
-export async function signSession(email: string): Promise<string> {
-  return new SignJWT({ sub: email })
+export async function signSession(email: string, authVersion = 0): Promise<string> {
+  return new SignJWT({ sub: email, authVersion })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(EXPIRY)
     .sign(getSecret())
 }
 
-export async function verifySession(token: string): Promise<{ email: string } | null> {
+export async function verifySession(token: string): Promise<{ email: string; authVersion: number } | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret())
-    return { email: payload.sub as string }
+    if (typeof payload.sub !== 'string') return null
+    const authVersion = Number.isSafeInteger(payload.authVersion) && Number(payload.authVersion) >= 0
+      ? Number(payload.authVersion)
+      : 0
+    return { email: payload.sub, authVersion }
   } catch {
     return null
   }
@@ -36,7 +40,8 @@ export function sessionCookieOptions(token: string, expire = false) {
     name: COOKIE_NAME,
     value: token,
     httpOnly: true,
-    secure: process.env.VYNAI_SECURE_COOKIE === 'true',
+    secure: process.env.VYNAI_SECURE_COOKIE === 'true' ||
+      (process.env.NODE_ENV === 'production' && process.env.VYNAI_SECURE_COOKIE !== 'false'),
     sameSite: 'lax' as const,
     path: '/',
     maxAge: expire ? 0 : 7 * 24 * 60 * 60,
@@ -67,7 +72,9 @@ export async function getSessionUser(req: NextRequest) {
   if (!token) return null
   const session = await verifySession(token)
   if (!session) return null
-  return getUserByEmail(session.email) ?? { email: session.email, role: 'admin' as const }
+  const user = getUserByEmail(session.email)
+  if (!user?.active || (user.authVersion ?? 0) !== session.authVersion) return null
+  return user
 }
 
 /**

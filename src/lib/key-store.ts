@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { randomBytes } from 'crypto'
+import { writeJsonAtomically } from '@/lib/json-storage'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const KEYS_FILE = path.join(DATA_DIR, 'keys.json')
@@ -11,6 +12,7 @@ export interface StoredKey {
   keyFull: string      // stored locally — never exposed to client
   keyMasked: string    // shown in UI
   createdAt: string
+  lastUsedAt: string | null
   status: 'active' | 'revoked'
   allowedModels: string[] | null
   rateLimitRpm: number
@@ -28,7 +30,10 @@ function ensure() {
 export function listKeys(): StoredKey[] {
   ensure()
   if (!fs.existsSync(KEYS_FILE)) return []
-  try { return JSON.parse(fs.readFileSync(KEYS_FILE, 'utf-8')).keys ?? [] } catch { return [] }
+  try {
+    const keys = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf-8')).keys ?? []
+    return keys.map((key: StoredKey) => ({ ...key, lastUsedAt: key.lastUsedAt ?? null }))
+  } catch { return [] }
 }
 
 export function createKey(input: { name: string; rateLimitRpm?: number; rateLimitTpm?: number | null; allowedModels?: string[] | null }): StoredKey {
@@ -42,6 +47,7 @@ export function createKey(input: { name: string; rateLimitRpm?: number; rateLimi
     keyMasked,
     createdAt: new Date().toISOString(),
     status: 'active',
+    lastUsedAt: null,
     allowedModels: input.allowedModels ?? null,
     rateLimitRpm: input.rateLimitRpm ?? 60,
     rateLimitTpm: input.rateLimitTpm ?? null,
@@ -52,7 +58,7 @@ export function createKey(input: { name: string; rateLimitRpm?: number; rateLimi
   }
   const keys = [...listKeys(), key]
   ensure()
-  fs.writeFileSync(KEYS_FILE, JSON.stringify({ keys }, null, 2))
+  writeJsonAtomically(KEYS_FILE, { keys })
   return key
 }
 
@@ -61,15 +67,27 @@ export function revokeKey(id: string): boolean {
   const idx = keys.findIndex(k => k.id === id)
   if (idx < 0) return false
   keys[idx] = { ...keys[idx], status: 'revoked' }
-  fs.writeFileSync(KEYS_FILE, JSON.stringify({ keys }, null, 2))
+  writeJsonAtomically(KEYS_FILE, { keys })
   return true
+}
+
+export function updateKey(
+  id: string,
+  updates: Partial<Pick<StoredKey, 'name' | 'allowedModels' | 'rateLimitRpm' | 'rateLimitTpm'>>
+): StoredKey | null {
+  const keys = listKeys()
+  const index = keys.findIndex(key => key.id === id)
+  if (index < 0 || keys[index].status !== 'active') return null
+  keys[index] = { ...keys[index], ...updates }
+  writeJsonAtomically(KEYS_FILE, { keys })
+  return keys[index]
 }
 
 export function deleteKey(id: string): boolean {
   const before = listKeys()
   const after = before.filter(k => k.id !== id)
   if (before.length === after.length) return false
-  fs.writeFileSync(KEYS_FILE, JSON.stringify({ keys: after }, null, 2))
+  writeJsonAtomically(KEYS_FILE, { keys: after })
   return true
 }
 
@@ -86,9 +104,23 @@ export function incrementUsage(id: string): void {
     const keys = listKeys()
     const idx = keys.findIndex(k => k.id === id)
     if (idx < 0) return
-    keys[idx] = { ...keys[idx], requestsTotal: keys[idx].requestsTotal + 1 }
+    keys[idx] = {
+      ...keys[idx],
+      requestsTotal: keys[idx].requestsTotal + 1,
+      lastUsedAt: new Date().toISOString(),
+    }
     ensure()
-    fs.writeFileSync(KEYS_FILE, JSON.stringify({ keys }, null, 2))
+    writeJsonAtomically(KEYS_FILE, { keys })
+  } catch { /* non-fatal */ }
+}
+
+export function markKeyUsed(id: string): void {
+  try {
+    const keys = listKeys()
+    const index = keys.findIndex(key => key.id === id)
+    if (index < 0) return
+    keys[index] = { ...keys[index], lastUsedAt: new Date().toISOString() }
+    writeJsonAtomically(KEYS_FILE, { keys })
   } catch { /* non-fatal */ }
 }
 
@@ -107,6 +139,6 @@ export function addTokenUsage(id: string, model: string, promptTokens: number, c
       tokensByModel: { ...byModel, [model]: { prompt: m.prompt + promptTokens, completion: m.completion + completionTokens } },
     }
     ensure()
-    fs.writeFileSync(KEYS_FILE, JSON.stringify({ keys }, null, 2))
+    writeJsonAtomically(KEYS_FILE, { keys })
   } catch { /* non-fatal */ }
 }

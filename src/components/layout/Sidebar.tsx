@@ -67,7 +67,7 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, onToggle
 
   return (
     <aside className={cn(
-      'fixed lg:relative inset-y-0 left-0 z-30 flex flex-col bg-slate-900 border-r border-slate-800 transition-all duration-300 flex-shrink-0',
+      'fixed lg:relative inset-y-0 left-0 z-30 flex flex-col bg-slate-950 border-r border-slate-800 transition-all duration-300 flex-shrink-0',
       collapsed ? 'w-16' : 'w-60',
       mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
     )}>
@@ -77,12 +77,12 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, onToggle
         collapsed ? 'justify-center' : 'justify-between',
       )}>
         {collapsed ? (
-          <div className="w-8 h-8 rounded-lg bg-cyan-500 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center">
             <Cpu size={16} className="text-white" />
           </div>
         ) : (
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-cyan-500 flex items-center justify-center flex-shrink-0">
+            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center flex-shrink-0">
               <Cpu size={14} className="text-white" />
             </div>
             <span className="font-black text-white text-lg tracking-tight">VynAI</span>
@@ -98,7 +98,7 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, onToggle
           return (
             <div key={group.label}>
               {!collapsed && (
-                <div className="px-3 mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                <div className="px-3 mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
                   {group.label}
                 </div>
               )}
@@ -113,10 +113,10 @@ export default function Sidebar({ collapsed, mobileOpen, onMobileClose, onToggle
                       onClick={onMobileClose}
                       title={collapsed ? item.label : undefined}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                        'flex items-center gap-3 px-3 py-2.5 rounded-lg border-l-2 text-sm font-medium transition-all duration-150',
                         active
-                          ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800/70',
+                          ? 'border-cyan-500 bg-cyan-500/10 text-cyan-400'
+                          : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800/60',
                         collapsed && 'justify-center px-2',
                       )}
                     >

@@ -1,25 +1,50 @@
-/**
- * In-memory alert transition/cooldown tracking.
- * Module-level state persists across requests within the same Node process.
- */
-
+import fs from 'fs'
+import path from 'path'
 import type { AppSettings } from '@/lib/settings-store'
-import { parseRecipients, sendEmail } from '@/lib/notifier'
+import { writeJsonAtomically } from '@/lib/json-storage'
+import { enqueueNotifications } from '@/lib/notification-outbox'
 
-const alertedOffline = new Set<string>()
-const activeThresholdAlerts = new Set<string>()
-const rateLimitAlertAt = new Map<string, number>()
+const STATE_FILE = path.join(process.cwd(), 'data', 'alert-state.json')
+
+interface AlertState {
+  offline: string[]
+  thresholds: string[]
+  rateLimitAt: Record<string, number>
+}
+
+function readState(): AlertState {
+  try {
+    const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'))
+    return {
+      offline: Array.isArray(state.offline) ? state.offline : [],
+      thresholds: Array.isArray(state.thresholds) ? state.thresholds : [],
+      rateLimitAt: state.rateLimitAt && typeof state.rateLimitAt === 'object' ? state.rateLimitAt : {},
+    }
+  } catch {
+    return { offline: [], thresholds: [], rateLimitAt: {} }
+  }
+}
+
+function writeState(state: AlertState): void {
+  writeJsonAtomically(STATE_FILE, state)
+}
 
 /** Returns true if this is a new offline event (first time seeing this server down). */
 export function trackOffline(serverId: string): boolean {
-  if (alertedOffline.has(serverId)) return false
-  alertedOffline.add(serverId)
+  const state = readState()
+  if (state.offline.includes(serverId)) return false
+  state.offline.push(serverId)
+  writeState(state)
   return true
 }
 
 /** Call when a server comes back online so it can alert again on next failure. */
 export function trackOnline(serverId: string): void {
-  alertedOffline.delete(serverId)
+  const state = readState()
+  const offline = state.offline.filter(id => id !== serverId)
+  if (offline.length === state.offline.length) return
+  state.offline = offline
+  writeState(state)
 }
 
 /**
@@ -27,12 +52,17 @@ export function trackOnline(serverId: string): void {
  * Returns true only when a condition transitions from inactive -> active.
  */
 export function trackThresholdAlert(key: string, active: boolean): boolean {
+  const state = readState()
+  const isActive = state.thresholds.includes(key)
   if (active) {
-    if (activeThresholdAlerts.has(key)) return false
-    activeThresholdAlerts.add(key)
+    if (isActive) return false
+    state.thresholds.push(key)
+    writeState(state)
     return true
   }
-  activeThresholdAlerts.delete(key)
+  if (!isActive) return false
+  state.thresholds = state.thresholds.filter(value => value !== key)
+  writeState(state)
   return false
 }
 
@@ -42,52 +72,26 @@ export function trackThresholdAlert(key: string, active: boolean): boolean {
  */
 export function canSendRateLimitAlert(key: string, cooldownMs = 60_000): boolean {
   const now = Date.now()
-  const last = rateLimitAlertAt.get(key) ?? 0
+  const state = readState()
+  const last = state.rateLimitAt[key] ?? 0
   if (now - last < cooldownMs) return false
-  rateLimitAlertAt.set(key, now)
+  state.rateLimitAt[key] = now
+  writeState(state)
   return true
 }
 
-async function postJson(url: string, payload: unknown): Promise<void> {
-  try {
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-  } catch {
-    // Non-fatal: channel failures must not break app flows
-  }
-}
-
-async function sendNotificationEmail(settings: AppSettings, subject: string, text: string): Promise<void> {
-  if (!settings.alertEmailEnabled) return
-  const recipients = parseRecipients(settings.alertRecipients)
-  if (!recipients.length) return
-  try {
-    await sendEmail(
-      {
-        host: settings.smtpHost,
-        port: settings.smtpPort,
-        user: settings.smtpUser,
-        pass: settings.smtpPassword,
-        from: settings.smtpFrom,
-      },
-      recipients,
-      subject,
-      text
-    )
-  } catch {
-    // Non-fatal: email failures must not break app flows
-  }
+export function clearRateLimitAlert(key: string): void {
+  const state = readState()
+  if (!(key in state.rateLimitAt)) return
+  delete state.rateLimitAt[key]
+  writeState(state)
 }
 
 export async function sendServerDownAlerts(settings: AppSettings, serverName: string): Promise<void> {
   const nowUtc = new Date().toUTCString()
-  const jobs: Promise<void>[] = []
-
-  if (settings.slackWebhookUrl) {
-    jobs.push(postJson(settings.slackWebhookUrl, {
+  await enqueueNotifications(settings, {
+    webhooks: {
+      slackWebhookUrl: {
       text: 'VynAI Alert - Server offline',
       blocks: [
         {
@@ -102,40 +106,31 @@ export async function sendServerDownAlerts(settings: AppSettings, serverName: st
           elements: [{ type: 'mrkdwn', text: `Detected at ${nowUtc}` }],
         },
       ],
-    }))
-  }
-
-  if (settings.teamsWebhookUrl) {
-    jobs.push(postJson(settings.teamsWebhookUrl, {
+      },
+      teamsWebhookUrl: {
       '@type': 'MessageCard',
       '@context': 'https://schema.org/extensions',
       summary: 'VynAI Alert - Server offline',
       text: `VynAI Alert\nServer offline: ${serverName}`,
-    }))
-  }
-
-  if (settings.customWebhookUrl) {
-    jobs.push(postJson(settings.customWebhookUrl, {
+      },
+      customWebhookUrl: {
       alert_type: 'server_down',
       title: 'VynAI Alert',
       description: `Server offline: ${serverName}`,
       severity: 'critical',
       timestamp: new Date().toISOString(),
       source: 'vynai/overview',
-    }))
-  }
-
-  jobs.push(sendNotificationEmail(settings, '[VynAI] Server Offline Alert', `Server offline: ${serverName}\nDetected at ${nowUtc}`))
-
-  await Promise.allSettled(jobs)
+      },
+    },
+    email: { subject: '[VynAI] Server Offline Alert', text: `Server offline: ${serverName}\nDetected at ${nowUtc}` },
+  })
 }
 
 export async function sendRateLimitAlerts(settings: AppSettings, detail: string): Promise<void> {
   const nowUtc = new Date().toUTCString()
-  const jobs: Promise<void>[] = []
-
-  if (settings.slackWebhookUrl) {
-    jobs.push(postJson(settings.slackWebhookUrl, {
+  await enqueueNotifications(settings, {
+    webhooks: {
+      slackWebhookUrl: {
       text: 'VynAI Alert - Rate limit hit',
       blocks: [
         {
@@ -150,32 +145,24 @@ export async function sendRateLimitAlerts(settings: AppSettings, detail: string)
           elements: [{ type: 'mrkdwn', text: `Detected at ${nowUtc}` }],
         },
       ],
-    }))
-  }
-
-  if (settings.teamsWebhookUrl) {
-    jobs.push(postJson(settings.teamsWebhookUrl, {
+      },
+      teamsWebhookUrl: {
       '@type': 'MessageCard',
       '@context': 'https://schema.org/extensions',
       summary: 'VynAI Alert - Rate limit hit',
       text: `VynAI Alert\nRate limit hit: ${detail}`,
-    }))
-  }
-
-  if (settings.customWebhookUrl) {
-    jobs.push(postJson(settings.customWebhookUrl, {
+      },
+      customWebhookUrl: {
       alert_type: 'rate_limit',
       title: 'VynAI Alert',
       description: `Rate limit hit: ${detail}`,
       severity: 'warning',
       timestamp: new Date().toISOString(),
       source: 'vynai/gateway',
-    }))
-  }
-
-  jobs.push(sendNotificationEmail(settings, '[VynAI] Rate Limit Alert', `Rate limit hit: ${detail}\nDetected at ${nowUtc}`))
-
-  await Promise.allSettled(jobs)
+      },
+    },
+    email: { subject: '[VynAI] Rate Limit Alert', text: `Rate limit hit: ${detail}\nDetected at ${nowUtc}` },
+  })
 }
 
 export async function sendThresholdAlerts(
@@ -186,10 +173,9 @@ export async function sendThresholdAlerts(
   threshold: string
 ): Promise<void> {
   const nowUtc = new Date().toUTCString()
-  const jobs: Promise<void>[] = []
-
-  if (settings.slackWebhookUrl) {
-    jobs.push(postJson(settings.slackWebhookUrl, {
+  await enqueueNotifications(settings, {
+    webhooks: {
+      slackWebhookUrl: {
       text: 'VynAI Alert - Threshold exceeded',
       blocks: [
         {
@@ -204,34 +190,25 @@ export async function sendThresholdAlerts(
           elements: [{ type: 'mrkdwn', text: `Detected at ${nowUtc}` }],
         },
       ],
-    }))
-  }
-
-  if (settings.teamsWebhookUrl) {
-    jobs.push(postJson(settings.teamsWebhookUrl, {
+      },
+      teamsWebhookUrl: {
       '@type': 'MessageCard',
       '@context': 'https://schema.org/extensions',
       summary: 'VynAI Alert - Threshold exceeded',
       text: `VynAI Alert\nServer: ${serverName}\nMetric: ${metric}\nValue: ${value}\nThreshold: ${threshold}`,
-    }))
-  }
-
-  if (settings.customWebhookUrl) {
-    jobs.push(postJson(settings.customWebhookUrl, {
+      },
+      customWebhookUrl: {
       alert_type: 'threshold',
       title: 'VynAI Alert',
       description: `Server ${serverName}: ${metric}=${value} (threshold ${threshold})`,
       severity: 'warning',
       timestamp: new Date().toISOString(),
       source: 'vynai/overview',
-    }))
-  }
-
-  jobs.push(sendNotificationEmail(
-    settings,
-    '[VynAI] Threshold Alert',
-    `Server: ${serverName}\nMetric: ${metric}\nValue: ${value}\nThreshold: ${threshold}\nDetected at ${nowUtc}`
-  ))
-
-  await Promise.allSettled(jobs)
+      },
+    },
+    email: {
+      subject: '[VynAI] Threshold Alert',
+      text: `Server: ${serverName}\nMetric: ${metric}\nValue: ${value}\nThreshold: ${threshold}\nDetected at ${nowUtc}`,
+    },
+  })
 }

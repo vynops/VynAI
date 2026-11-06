@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validateKey } from '@/lib/key-store'
+import { validateKey, markKeyUsed } from '@/lib/key-store'
 import { listServers } from '@/lib/server-store'
 import { ollamaStatus } from '@/lib/ollama'
 
@@ -10,7 +10,9 @@ function errorJson(status: number, message: string) {
 export async function GET(req: NextRequest) {
   // Auth
   const token = (req.headers.get('authorization') ?? '').replace('Bearer ', '').trim()
-  if (!token || !validateKey(token)) return errorJson(401, 'Invalid or missing API key')
+  const apiKey = token ? validateKey(token) : null
+  if (!apiKey) return errorJson(401, 'Invalid or missing API key')
+  markKeyUsed(apiKey.id)
 
   // Collect all models from all online servers
   const servers = listServers()
@@ -24,6 +26,7 @@ export async function GET(req: NextRequest) {
   results.forEach((r) => {
     if (r.status !== 'fulfilled' || !r.value.online) return
     for (const tag of r.value.tags) {
+      if (apiKey.allowedModels && !apiKey.allowedModels.includes(tag.name)) continue
       if (!seen.has(tag.name)) {
         seen.add(tag.name)
         models.push({

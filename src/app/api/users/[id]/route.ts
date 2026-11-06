@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser, requireAdmin } from '@/lib/auth'
-import { updateUser, deleteUser, getUserById, changePassword, verifyPassword, listUsers } from '@/lib/user-store'
+import { updateUser, deleteUser, getUserById, changePassword, verifyPassword, listUsers, toPublicUser, wouldRemoveLastActiveAdmin } from '@/lib/user-store'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionUser(req)
@@ -20,9 +20,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   let body: { name?: string; role?: 'admin' | 'viewer'; active?: boolean; password?: string; currentPassword?: string }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
+  if (body.name !== undefined && (typeof body.name !== 'string' || !body.name.trim())) {
+    return NextResponse.json({ error: 'name must be a non-empty string' }, { status: 400 })
+  }
+  if (body.role !== undefined && body.role !== 'admin' && body.role !== 'viewer') {
+    return NextResponse.json({ error: 'role must be admin or viewer' }, { status: 400 })
+  }
+  if (body.active !== undefined && typeof body.active !== 'boolean') {
+    return NextResponse.json({ error: 'active must be a boolean' }, { status: 400 })
+  }
+
   // Non-admins cannot change role or active status
   if (!isAdmin && (body.role !== undefined || body.active !== undefined)) {
     return NextResponse.json({ error: 'Only admins can modify user roles or active status' }, { status: 403 })
+  }
+
+  if (isAdmin && wouldRemoveLastActiveAdmin(listUsers(), id, { role: body.role, active: body.active })) {
+    return NextResponse.json({ error: 'Cannot deactivate or demote the last active admin' }, { status: 400 })
   }
 
   // Handle password update
@@ -46,7 +60,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Handle name / role / active updates
   const updates: Partial<Pick<typeof targetUser, 'name' | 'role' | 'active'>> = {}
-  if (body.name !== undefined) updates.name = body.name
+  if (body.name !== undefined) updates.name = body.name.trim()
   if (isAdmin && body.role !== undefined) updates.role = body.role
   if (isAdmin && body.active !== undefined) updates.active = body.active
 
@@ -55,8 +69,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const updatedUser = getUserById(id)!
-  const { passwordHash: _ph, ...userClean } = updatedUser
-  return NextResponse.json(userClean)
+  return NextResponse.json(toPublicUser(updatedUser))
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -65,11 +78,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { id } = await params
 
-  // Prevent deleting the last admin
-  const { listUsers } = await import('@/lib/user-store')
-  const admins = listUsers().filter(u => u.role === 'admin' && u.active)
-  const target = admins.find(u => u.id === id)
-  if (target && admins.length <= 1) {
+  if (wouldRemoveLastActiveAdmin(listUsers(), id, { active: false })) {
     return NextResponse.json({ error: 'Cannot delete the last admin account' }, { status: 400 })
   }
 

@@ -25,6 +25,7 @@ export default function ModelsPage() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Category | 'all'>('all')
   const [showPull, setShowPull] = useState(false)
+  const [selectedPullModel, setSelectedPullModel] = useState<string | null>(null)
 
   const categorized = models.map(m => ({ ...m, category: guessCategory(m.name, m.details?.family) as Category }))
 
@@ -57,7 +58,7 @@ export default function ModelsPage() {
           <button onClick={() => mutate()} className="p-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" title="Refresh">
             <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
           </button>
-          <button onClick={() => setShowPull(true)} disabled={!servers.length}
+          <button onClick={() => { setSelectedPullModel(null); setShowPull(true) }} disabled={!servers.length}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-white font-semibold text-sm transition-colors disabled:opacity-40">
             <Download size={15} /> Pull Model
           </button>
@@ -175,7 +176,8 @@ export default function ModelsPage() {
                       </td>
                       {/* Actions */}
                       <td className="px-4 py-3">
-                        <button className="p-1.5 rounded hover:bg-slate-800 text-slate-600 hover:text-slate-300 transition-colors" title="Pull / update">
+                        <button onClick={() => { setSelectedPullModel(m.name); setShowPull(true) }} disabled={!servers.length}
+                          className="p-1.5 rounded hover:bg-slate-800 text-slate-600 hover:text-slate-300 transition-colors disabled:opacity-40" title={`Pull / update ${m.name}`}>
                           <Download size={12} />
                         </button>
                       </td>
@@ -189,7 +191,8 @@ export default function ModelsPage() {
       </div>
 
       {showPull && (
-        <PullModelModal servers={servers} onClose={() => setShowPull(false)} onPulled={() => mutate()} />
+        <PullModelModal servers={servers} defaultModel={selectedPullModel ?? undefined}
+          onClose={() => { setShowPull(false); setSelectedPullModel(null) }} onPulled={() => mutate()} />
       )}
     </div>
   )

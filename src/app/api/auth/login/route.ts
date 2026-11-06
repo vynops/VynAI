@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { signSession, sessionCookieOptions, safeEqual } from '@/lib/auth'
 import { validateLogin, ensureAdminFromEnv, listUsers } from '@/lib/user-store'
+import { checkLoginRateLimit } from '@/lib/rate-limiter'
 
 export async function POST(req: NextRequest) {
   let body: { email?: string; password?: string }
@@ -11,7 +12,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const { email = '', password = '' } = body
+  const email = typeof body?.email === 'string' ? body.email : ''
+  const password = typeof body?.password === 'string' ? body.password : ''
+  if (!checkLoginRateLimit(email)) {
+    return NextResponse.json({ error: 'Too many login attempts. Try again shortly.' }, {
+      status: 429,
+      headers: { 'Retry-After': '60' },
+    })
+  }
+  if (!process.env.VYNAI_SECRET) {
+    return NextResponse.json({ error: 'Authentication is not configured' }, { status: 500 })
+  }
 
   // Seed admin from env on first boot (if no users exist yet)
   ensureAdminFromEnv()
@@ -20,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (listUsers().length > 0) {
     const user = validateLogin(email, password)
     if (!user) return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
-    const token = await signSession(user.email)
+    const token = await signSession(user.email, user.authVersion)
     const res = NextResponse.json({ ok: true })
     res.cookies.set(sessionCookieOptions(token))
     return res

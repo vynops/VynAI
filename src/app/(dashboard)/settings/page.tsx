@@ -8,6 +8,13 @@ import { cn } from '@/lib/utils'
 import type { AppSettings } from '@/lib/settings-store'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
+type SecretField = 'slackWebhookUrl' | 'teamsWebhookUrl' | 'customWebhookUrl' | 'smtpPassword'
+type SettingsResponse = AppSettings & {
+  adminEmail: string
+  currentPort: string
+  secretsConfigured: Record<SecretField, boolean>
+  notificationDelivery: { pending: number; retrying: number; oldestPendingAt: string | null; lastError: string | null }
+}
 
 // ── Layout helpers ────────────────────────────────────────────────────────────
 
@@ -62,9 +69,10 @@ function Toggle({ enabled, onChange, disabled }: { enabled: boolean; onChange: (
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { data: remote, mutate } = useSWR<AppSettings & { adminEmail: string; currentPort: string }>('/api/settings', fetcher)
+  const { data: remote, mutate } = useSWR<SettingsResponse>('/api/settings', fetcher)
 
   const [form, setForm] = useState<AppSettings & { adminEmail: string; currentPort: string } | null>(null)
+  const [clearSecrets, setClearSecrets] = useState<SecretField[]>([])
   const [saving, setSaving] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saved' | 'error'>('idle')
 
@@ -77,17 +85,29 @@ export default function SettingsPage() {
   const [testTo, setTestTo] = useState('')
   const [testingEmail, setTestingEmail] = useState(false)
   const [emailTest, setEmailTest] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [backupMessage, setBackupMessage] = useState('')
 
   // Hydrate form from server on first load
   useEffect(() => {
-    if (remote && !form) setForm(remote)
+    if (remote && !form) {
+      setForm({ ...remote, slackWebhookUrl: '', teamsWebhookUrl: '', customWebhookUrl: '', smtpPassword: '' })
+    }
   }, [remote, form])
 
   function set<K extends keyof (AppSettings & { adminEmail: string; currentPort: string })>(
     key: K, value: (AppSettings & { adminEmail: string; currentPort: string })[K]
   ) {
     setForm(prev => prev ? { ...prev, [key]: value } : prev)
+    if (['slackWebhookUrl', 'teamsWebhookUrl', 'customWebhookUrl', 'smtpPassword'].includes(String(key))) {
+      setClearSecrets(prev => prev.filter(field => field !== key))
+    }
     setSaveState('idle')
+  }
+
+  function clearSecret(field: SecretField) {
+    set(field, '')
+    setClearSecrets(prev => prev.includes(field) ? prev : [...prev, field])
   }
 
   async function handleSave() {
@@ -98,11 +118,13 @@ export default function SettingsPage() {
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, clearSecrets }),
       })
       if (res.ok) {
-        const saved = await res.json()
-        mutate({ ...saved, adminEmail: form.adminEmail }, false)
+        const saved: SettingsResponse = await res.json()
+        mutate(saved, false)
+        setForm({ ...form, slackWebhookUrl: '', teamsWebhookUrl: '', customWebhookUrl: '', smtpPassword: '' })
+        setClearSecrets([])
         setSaveState('saved')
         setTimeout(() => setSaveState('idle'), 3000)
       } else {
@@ -117,7 +139,7 @@ export default function SettingsPage() {
 
   async function handleTestNotification(channel: 'slackWebhookUrl' | 'teamsWebhookUrl' | 'customWebhookUrl') {
     const url = String(form?.[channel] ?? '').trim()
-    if (!url) {
+    if (!url && (clearSecrets.includes(channel) || !remote?.secretsConfigured[channel])) {
       setChannelTestResults(prev => ({ ...prev, [channel]: { ok: false, msg: 'Enter webhook URL first' } }))
       return
     }
@@ -129,7 +151,7 @@ export default function SettingsPage() {
       const res = await fetch('/api/settings/test-notification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel, url }),
+        body: JSON.stringify(url ? { channel, url } : { channel }),
       })
       const data = await res.json().catch(() => ({} as { message?: string; error?: string }))
 
@@ -164,6 +186,35 @@ export default function SettingsPage() {
       setEmailTest({ ok: false, msg: err instanceof Error ? err.message : 'Email test failed' })
     } finally {
       setTestingEmail(false)
+    }
+  }
+
+  async function handleRestoreBackup(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0]
+    if (!file) return
+    setBackupMessage('')
+    if (!window.confirm('Restore this backup? Current server, key, user, settings, log, and automation data will be replaced.')) {
+      event.currentTarget.value = ''
+      return
+    }
+
+    setBackupBusy(true)
+    try {
+      const backup = JSON.parse(await file.text())
+      const response = await fetch('/api/backup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(backup),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error ?? 'Backup restore failed')
+      setBackupMessage('Restore complete. Sign in again to continue.')
+      setTimeout(() => { window.location.href = '/login' }, 1200)
+    } catch (error) {
+      setBackupMessage(error instanceof Error ? error.message : 'Backup restore failed')
+    } finally {
+      setBackupBusy(false)
+      event.currentTarget.value = ''
     }
   }
 
@@ -235,12 +286,13 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <input className={inputCls} value={form?.slackWebhookUrl ?? ''}
               onChange={e => set('slackWebhookUrl', e.target.value)}
-              placeholder="https://hooks.slack.com/services/..." />
+              placeholder={remote?.secretsConfigured.slackWebhookUrl ? 'Saved; leave blank to keep current' : 'https://hooks.slack.com/services/...'} />
+            {remote?.secretsConfigured.slackWebhookUrl && <button type="button" onClick={() => clearSecret('slackWebhookUrl')} className="text-xs text-slate-500 hover:text-red-400">Clear saved webhook</button>}
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => handleTestNotification('slackWebhookUrl')}
-                disabled={testingChannel === 'slackWebhookUrl' || !(form?.slackWebhookUrl ?? '').trim()}
+                disabled={testingChannel === 'slackWebhookUrl' || clearSecrets.includes('slackWebhookUrl') || (!(form?.slackWebhookUrl ?? '').trim() && !remote?.secretsConfigured.slackWebhookUrl)}
                 className={cn(
                   'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 border',
                   channelTestResults.slackWebhookUrl?.ok
@@ -266,12 +318,13 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <input className={inputCls} value={form?.teamsWebhookUrl ?? ''}
               onChange={e => set('teamsWebhookUrl', e.target.value)}
-              placeholder="https://outlook.webhook.office.com/webhookb2/..." />
+              placeholder={remote?.secretsConfigured.teamsWebhookUrl ? 'Saved; leave blank to keep current' : 'https://outlook.webhook.office.com/webhookb2/...'} />
+            {remote?.secretsConfigured.teamsWebhookUrl && <button type="button" onClick={() => clearSecret('teamsWebhookUrl')} className="text-xs text-slate-500 hover:text-red-400">Clear saved webhook</button>}
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => handleTestNotification('teamsWebhookUrl')}
-                disabled={testingChannel === 'teamsWebhookUrl' || !(form?.teamsWebhookUrl ?? '').trim()}
+                disabled={testingChannel === 'teamsWebhookUrl' || clearSecrets.includes('teamsWebhookUrl') || (!(form?.teamsWebhookUrl ?? '').trim() && !remote?.secretsConfigured.teamsWebhookUrl)}
                 className={cn(
                   'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 border',
                   channelTestResults.teamsWebhookUrl?.ok
@@ -297,12 +350,13 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <input className={inputCls} value={form?.customWebhookUrl ?? ''}
               onChange={e => set('customWebhookUrl', e.target.value)}
-              placeholder="https://your-webhook-endpoint.com/alerts" />
+              placeholder={remote?.secretsConfigured.customWebhookUrl ? 'Saved; leave blank to keep current' : 'https://your-webhook-endpoint.com/alerts'} />
+            {remote?.secretsConfigured.customWebhookUrl && <button type="button" onClick={() => clearSecret('customWebhookUrl')} className="text-xs text-slate-500 hover:text-red-400">Clear saved webhook</button>}
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => handleTestNotification('customWebhookUrl')}
-                disabled={testingChannel === 'customWebhookUrl' || !(form?.customWebhookUrl ?? '').trim()}
+                disabled={testingChannel === 'customWebhookUrl' || clearSecrets.includes('customWebhookUrl') || (!(form?.customWebhookUrl ?? '').trim() && !remote?.secretsConfigured.customWebhookUrl)}
                 className={cn(
                   'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 border',
                   channelTestResults.customWebhookUrl?.ok
@@ -344,11 +398,12 @@ export default function SettingsPage() {
                 onChange={e => set('smtpUser', e.target.value)} placeholder="SMTP username" />
               <div className="relative">
                 <input className={cn(inputCls, 'pr-10')} type={showSmtpPw ? 'text' : 'password'} value={form?.smtpPassword ?? ''}
-                  onChange={e => set('smtpPassword', e.target.value)} placeholder="SMTP password" />
+                  onChange={e => set('smtpPassword', e.target.value)} placeholder={remote?.secretsConfigured.smtpPassword ? 'Saved; leave blank to keep current' : 'SMTP password'} />
                 <button type="button" onClick={() => setShowSmtpPw(v => !v)}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
                   {showSmtpPw ? <EyeOff size={13} /> : <Eye size={13} />}
                 </button>
+                {remote?.secretsConfigured.smtpPassword && <button type="button" onClick={() => clearSecret('smtpPassword')} className="mt-1 text-xs text-slate-500 hover:text-red-400">Clear saved password</button>}
               </div>
               <input className={inputCls} value={form?.smtpFrom ?? ''}
                 onChange={e => set('smtpFrom', e.target.value)} placeholder="From address (e.g. VynAI <alerts@company.com>)" />
@@ -405,7 +460,7 @@ export default function SettingsPage() {
 
       {/* Data retention */}
       <Section title="Data Retention" icon={Database}>
-        <Field label="Request log retention (days)" sub="0 = keep forever">
+        <Field label="Request log retention (days)" sub="0 = no age-based pruning; storage remains capped at 10,000 entries">
           <input className={inputCls} type="number" value={form?.logRetentionDays ?? ''}
             onChange={e => set('logRetentionDays', Number(e.target.value))} placeholder="30" />
         </Field>
@@ -418,6 +473,34 @@ export default function SettingsPage() {
             Server registry is in <code className="font-mono text-slate-400">data/servers.json</code>.
             None of these are committed to git by default.
           </p>
+        </div>
+      </Section>
+
+      <Section title="Notification Delivery" icon={Bell} badge={remote?.notificationDelivery.pending ? `${remote.notificationDelivery.pending} pending` : 'All delivered'}>
+        {remote?.notificationDelivery.pending ? (
+          <div className="space-y-1 text-xs text-amber-300">
+            <p>{remote.notificationDelivery.retrying} delivery{remote.notificationDelivery.retrying === 1 ? '' : 'ies'} retrying.</p>
+            {remote.notificationDelivery.oldestPendingAt && <p className="text-slate-400">Oldest pending: {new Date(remote.notificationDelivery.oldestPendingAt).toLocaleString()}</p>}
+            {remote.notificationDelivery.lastError && <p className="break-words text-red-400">Latest error: {remote.notificationDelivery.lastError}</p>}
+          </div>
+        ) : <p className="text-xs text-green-400">No queued notification deliveries.</p>}
+      </Section>
+
+      <Section title="Data Backup" icon={Database}>
+        <p className="text-xs leading-relaxed text-amber-300/80">
+          Backups contain API keys, SSH credentials, password hashes, settings, logs, and automation history. Store exports securely.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <a href="/api/backup" download
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800">
+            Download backup
+          </a>
+          <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg bg-cyan-500 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-400 ${backupBusy ? 'pointer-events-none opacity-50' : ''}`}>
+            {backupBusy && <Loader2 size={12} className="animate-spin" />}
+            Restore backup
+            <input type="file" accept="application/json,.json" onChange={handleRestoreBackup} className="sr-only" disabled={backupBusy} />
+          </label>
+          {backupMessage && <span role="status" className="text-xs text-slate-300">{backupMessage}</span>}
         </div>
       </Section>
 

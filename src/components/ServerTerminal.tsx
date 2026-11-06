@@ -143,6 +143,11 @@ export default function ServerTerminal({ serverId, serverName }: Props) {
         ))}
       </div>
 
+      <div role="note" className="flex items-start gap-2 px-4 py-2.5 border-b border-amber-500/20 bg-amber-500/5 text-xs text-amber-300/80">
+        <AlertCircle size={13} className="mt-0.5 flex-shrink-0" />
+        <span>Admin-only shell access. Commands run remotely as the configured SSH user; the blocklist is not a sandbox.</span>
+      </div>
+
       {/* Output area */}
       <div ref={outputRef}
         className="px-4 py-3 font-mono text-xs space-y-4 overflow-y-auto"

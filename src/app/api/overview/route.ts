@@ -104,7 +104,7 @@ export async function GET() {
       if (settings.alertOnServerDown) {
         const isNew = trackOffline(s.id)
         if (isNew) {
-          void sendServerDownAlerts(settings, s.name)
+          void sendServerDownAlerts(settings, s.name).catch(() => trackOnline(s.id))
         }
       }
     } else {
@@ -132,7 +132,7 @@ export async function GET() {
           'GPU temperature',
           `${maxTemp}C`,
           `${settings.gpuTempThreshold}C`
-        )
+        ).catch(() => trackThresholdAlert(`gpu-temp-${s.id}`, false))
       }
 
       const totalVramMiB = metrics.gpus.reduce((sum, g) => sum + g.vramTotalMiB, 0)
@@ -156,7 +156,7 @@ export async function GET() {
           'VRAM usage',
           `${vramPct.toFixed(1)}%`,
           `${settings.vramThreshold}%`
-        )
+        ).catch(() => trackThresholdAlert(`vram-${s.id}`, false))
       }
     }
   }

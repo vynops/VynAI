@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import { randomBytes } from 'crypto'
+import { loadSettings } from '@/lib/settings-store'
+import { writeJsonAtomically } from '@/lib/json-storage'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const LOGS_FILE = path.join(DATA_DIR, 'request-logs.json')
@@ -26,20 +28,36 @@ function ensure() {
 export function listLogs(limit = 500): RequestLog[] {
   ensure()
   if (!fs.existsSync(LOGS_FILE)) return []
-  try {
-    const all: RequestLog[] = JSON.parse(fs.readFileSync(LOGS_FILE, 'utf-8')).logs ?? []
-    return all.slice(-limit).reverse()
-  } catch { return [] }
+  const all = readLogs()
+  const retained = applyRetention(all)
+  if (retained.length !== all.length) writeLogs(retained)
+  return retained.slice(-limit).reverse()
+}
+
+function readLogs(): RequestLog[] {
+  try { return JSON.parse(fs.readFileSync(LOGS_FILE, 'utf-8')).logs ?? [] } catch { return [] }
+}
+
+function writeLogs(logs: RequestLog[]): void {
+  writeJsonAtomically(LOGS_FILE, { logs })
+}
+
+function applyRetention(logs: RequestLog[]): RequestLog[] {
+  const retentionDays = loadSettings().logRetentionDays
+  if (!Number.isFinite(retentionDays) || retentionDays <= 0) return logs
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000
+  return logs.filter(log => {
+    const timestamp = Date.parse(log.timestamp)
+    return !Number.isFinite(timestamp) || timestamp >= cutoff
+  })
 }
 
 export function appendLog(log: Omit<RequestLog, 'id'>): void {
   try {
     ensure()
-    const existing: RequestLog[] = fs.existsSync(LOGS_FILE)
-      ? (JSON.parse(fs.readFileSync(LOGS_FILE, 'utf-8')).logs ?? [])
-      : []
+    const existing = applyRetention(fs.existsSync(LOGS_FILE) ? readLogs() : [])
     const trimmed = existing.length >= MAX_LOGS ? existing.slice(-MAX_LOGS + 1) : existing
     trimmed.push({ id: randomBytes(6).toString('hex'), ...log })
-    fs.writeFileSync(LOGS_FILE, JSON.stringify({ logs: trimmed }, null, 2))
+    writeLogs(trimmed)
   } catch { /* non-fatal */ }
 }
