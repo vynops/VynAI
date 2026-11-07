@@ -288,7 +288,10 @@ function UsageGuide() {
 }
 
 export default function GatewayPage() {
-  const { data: keys = [], mutate } = useSWR<ApiKey[]>('/api/keys', fetcher, { refreshInterval: 30000 })
+  const { data: me } = useSWR<{ role: 'admin' | 'viewer' }>('/api/auth/me', fetcher)
+  const isAdmin = me?.role === 'admin'
+  const { data: keyData = [], mutate } = useSWR<ApiKey[]>(isAdmin ? '/api/keys' : null, fetcher, { refreshInterval: 30000 })
+  const keys = Array.isArray(keyData) ? keyData : []
   const [showCreate, setShowCreate] = useState(false)
   const [expandedTokens, setExpandedTokens] = useState<string | null>(null)
   const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({})
@@ -358,14 +361,16 @@ export default function GatewayPage() {
             OpenAI-compatible endpoint · <code className="font-mono text-cyan-400">{typeof window !== 'undefined' ? window.location.origin : ''}/api/v1</code>
           </p>
         </div>
-        <button onClick={() => setShowCreate(true)}
-          className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-white font-semibold text-sm transition-colors">
-          <Plus size={15} /> Create Key
-        </button>
+        {isAdmin && (
+          <button onClick={() => setShowCreate(true)}
+            className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-white font-semibold text-sm transition-colors">
+            <Plus size={15} /> Create Key
+          </button>
+        )}
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {isAdmin && <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
           { label: 'Active Keys', value: active.length.toString(), icon: Key, color: 'text-cyan-400' },
           { label: 'Total Keys', value: keys.length.toString(), icon: Shield, color: 'text-violet-400' },
@@ -379,13 +384,13 @@ export default function GatewayPage() {
             </div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Usage guide */}
       <UsageGuide />
 
       {/* Keys table */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
+      {isAdmin ? <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
           <h3 className="text-sm font-bold text-white">API Keys</h3>
           <span className="text-xs text-slate-500">{active.length} active · {keys.length - active.length} revoked</span>
@@ -527,10 +532,15 @@ export default function GatewayPage() {
             {visibleKeys.length === 0 && <div className="py-8 text-center text-xs text-slate-500">No keys match these filters.</div>}
           </div>
         )}
-      </div>
+      </div> : me?.role === 'viewer' ? (
+        <div className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
+          <Shield size={16} className="text-cyan-400" />
+          API key management is available to administrators.
+        </div>
+      ) : null}
 
-      {showCreate && <CreateKeyModal onClose={() => setShowCreate(false)} onCreated={() => mutate()} />}
-      {editingKey && <CreateKeyModal editing={editingKey} onClose={() => setEditingKey(null)} onCreated={() => mutate()} />}
+      {isAdmin && showCreate && <CreateKeyModal onClose={() => setShowCreate(false)} onCreated={() => mutate()} />}
+      {isAdmin && editingKey && <CreateKeyModal editing={editingKey} onClose={() => setEditingKey(null)} onCreated={() => mutate()} />}
     </div>
   )
 }
