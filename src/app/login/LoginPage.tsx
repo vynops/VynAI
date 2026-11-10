@@ -58,8 +58,7 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8">
-          <h2 className="text-base font-bold text-white mb-1">Sign in</h2>
-          <p className="text-xs text-slate-500 mb-6">Admin access only</p>
+          <h2 className="text-base font-bold text-white mb-6 text-center">Log In</h2>
 
           {/* Error banner */}
           {error && (
@@ -124,12 +123,6 @@ export default function LoginPage() {
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
-        </div>
-
-        {/* First-time setup hint */}
-        <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-xs text-slate-500 space-y-1.5">
-          <p className="font-semibold text-slate-400">First-time setup</p>
-          <p>Set <span className="font-mono text-slate-400">VYNAI_ADMIN_EMAIL</span> and <span className="font-mono text-slate-400">VYNAI_ADMIN_PASSWORD</span> in <span className="font-mono text-slate-400">.env.local</span> — the admin account is created automatically on first boot.</p>
         </div>
 
         {/* Family footer */}
