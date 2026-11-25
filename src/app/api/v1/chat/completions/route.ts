@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
     model?: string
     messages?: Array<{ role: string; content: string }>
     stream?: boolean
+    stream_options?: { include_usage?: boolean }
     temperature?: number
     max_tokens?: number
     top_p?: number
@@ -217,6 +218,18 @@ export async function POST(req: NextRequest) {
                     model: body.model,
                     choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
                   }))
+                  // OpenAI-compatible usage chunk, sent only when the caller asked via
+                  // stream_options.include_usage (mirrors real OpenAI streaming behavior).
+                  if (body.stream_options?.include_usage) {
+                    push(JSON.stringify({
+                      id: completionId,
+                      object: 'chat.completion.chunk',
+                      created,
+                      model: body.model,
+                      choices: [],
+                      usage: { prompt_tokens: pt, completion_tokens: ct, total_tokens: pt + ct },
+                    }))
+                  }
                 } else {
                   push(JSON.stringify({
                     id: completionId,
